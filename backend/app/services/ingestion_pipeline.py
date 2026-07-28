@@ -204,6 +204,23 @@ def _run(db: Session, document: Document) -> IngestionResult:
             )
         )
 
+    # Commit the chunk rows BEFORE indexing them.
+    #
+    # Not cosmetic. A VectorStore may run in its own database session — the
+    # pgvector backend does, because the protocol hands it records, not a
+    # Session. Rows that have only been flushed are invisible to that session,
+    # so its UPDATE matches nothing. And an UPDATE that matches nothing is not
+    # an error: ingestion reports success, the document is marked READY, and
+    # every later query returns zero dense candidates. The gate then refuses
+    # questions the corpus does answer, which looks like bad retrieval rather
+    # than a missing write.
+    #
+    # Committing here is safe: the document is still PROCESSING, so nothing is
+    # retrievable yet. If the upsert fails after this point the chunks exist
+    # without vectors, the document never reaches READY, and reprocessing fixes
+    # it — the same failure mode the external-index path already had.
+    db.commit()
+
     # Index BEFORE marking READY: a READY document must be searchable.
     store.upsert(records)
 
