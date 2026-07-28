@@ -112,8 +112,6 @@ services:
       # Measured, not guessed: on-topic 0.63-0.76, off-corpus 0.49-0.52.
       - key: RELEVANCE_FLOOR
         value: "0.58"
-      - key: RETRIEVAL_CANDIDATES
-        value: "40"
       - key: RETRIEVAL_TOP_K
         value: "8"
       - key: CHUNK_SIZE_CHARS
@@ -134,8 +132,30 @@ services:
       - key: LOG_JSON
         value: "true"
 
-      # A free instance has 512 MB. The ONNX runtime is the largest consumer,
-      # so keep its thread pools small rather than letting it size to the host's
-      # visible core count, which is not what this container actually gets.
+      # ── memory budget: 512 MB, and ONNX inference is the tenant ──────────
+      #
+      # The first attempt was OOM-killed mid-ingestion. The model alone is
+      # ~200 MB resident; parsing a 1.5 MB PDF, holding ~100 chunk texts and
+      # embedding 64 of them at once pushed it over. Three levers, in order of
+      # effect:
+      #
+      # 1. Batch size. Peak allocation during inference scales with it, and the
+      #    throughput cost is small because the model load dominates anyway.
+      - key: EMBEDDING_BATCH_SIZE
+        value: "4"
+      # 2. Thread count. onnxruntime allocates a memory arena PER THREAD, and it
+      #    sizes its pool from the host's visible core count — which is not what
+      #    this container is actually allotted. One thread, one arena.
       - key: OMP_NUM_THREADS
-        value: "2"
+        value: "1"
+      - key: ORT_NUM_THREADS
+        value: "1"
+      # 3. Upload cap. A 50 MB document cannot be parsed inside this budget, so
+      #    it is rejected at the door with a clear 413 rather than taking the
+      #    instance down. The local stack keeps the full 50 MB.
+      - key: MAX_UPLOAD_BYTES
+        value: "8388608"   # 8 MB
+      # Retrieval breadth also costs memory per query; 40 candidates is generous
+      # for a demo corpus and 20 measurably changes nothing at this size.
+      - key: RETRIEVAL_CANDIDATES
+        value: "20"
