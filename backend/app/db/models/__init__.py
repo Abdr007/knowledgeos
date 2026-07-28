@@ -21,6 +21,7 @@ from app.db.models.enums import (
 )
 from app.db.models.identity import Membership, Organization, RefreshToken, User, Workspace
 from app.db.models.ops import AuditEvent, UsageEvent
+from app.db.models.storage import StoredObject
 
 __all__ = [
     "AuditEvent",
@@ -41,6 +42,7 @@ __all__ = [
     "RefreshToken",
     "Role",
     "SourceType",
+    "StoredObject",
     "UsageEvent",
     "UsageKind",
     "User",

@@ -64,9 +64,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             )
 
         # Interactive docs need inline scripts and the Swagger CDN, so the strict
-        # policy above would blank the page. They are disabled in production
-        # anyway (main.py), so this relaxation cannot reach a live deployment.
-        if not settings.is_production and request.url.path in {"/docs", "/redoc"}:
+        # policy above would blank the page. Scoped to the two doc routes only,
+        # so the relaxation cannot apply to any endpoint that returns data.
+        if settings.expose_docs and request.url.path in {"/docs", "/redoc"}:
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self' https://cdn.jsdelivr.net; "
                 "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "

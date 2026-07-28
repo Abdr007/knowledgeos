@@ -1,0 +1,179 @@
+name: CI
+
+# Runs the same checks as `make check`, so a green tick here means the same
+# thing a green local run does. Service containers rather than mocks: the suite
+# exercises the generated tsvector column, the cascade rules and the unique
+# constraints, which is where the bugs actually live.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  backend:
+    name: Backend — lint, types, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: knowledgeos
+          POSTGRES_PASSWORD: knowledgeos
+          POSTGRES_DB: knowledgeos
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U knowledgeos -d knowledgeos"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+      qdrant:
+        # Pinned to match the qdrant-client major/minor in pyproject; the client
+        # refuses a mismatch of more than one minor version.
+        image: qdrant/qdrant:v1.18.0
+        ports: ["6333:6333"]
+
+    env:
+      ENVIRONMENT: test
+      SECRET_KEY: ci-secret-key-not-used-anywhere-real-0123456789
+      DATABASE_URL: postgresql+psycopg://knowledgeos:knowledgeos@localhost:5432/knowledgeos
+      REDIS_URL: redis://localhost:6379/0
+      QDRANT_URL: http://localhost:6333
+      # Deterministic, offline, no cost. Asserting on a real model's output means
+      # asserting on something that legitimately varies between runs.
+      LLM_PROVIDER: scripted
+      EMBEDDING_PROVIDER: local
+      EMBEDDING_MODEL: BAAI/bge-small-en-v1.5
+      EMBEDDING_DIMENSIONS: "384"
+      LOG_JSON: "false"
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check app tests
+
+      - name: Format check
+        run: uv run ruff format --check app tests
+
+      - name: Type check
+        run: uv run mypy app
+
+      # Applied as a separate step, exactly as in production (TDD §19) — never
+      # at application start, where N replicas would race Alembic.
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+
+      - name: Migrations are reversible
+        # The rollback caught a real defect: autogenerate creates native enum
+        # types but never drops them, so downgrade leaked all seven and the next
+        # upgrade died with 'type "role" already exists'.
+        run: |
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      - name: Tests
+        run: uv run pytest tests -q
+
+  frontend:
+    name: Frontend — types and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+  security:
+    name: Security — secrets and dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: a secret committed once and removed later is still
+          # public in a public repository (TDD §28.8).
+          fetch-depth: 0
+
+      - name: Scan history for credentials
+        run: |
+          set -euo pipefail
+          PATTERN='(sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{40,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
+          if git log -p --all | grep -nIE "$PATTERN"; then
+            echo "::error::Credential-shaped string found in git history"
+            exit 1
+          fi
+          if git ls-files | grep -qxF '.env'; then
+            echo "::error::.env is tracked"
+            exit 1
+          fi
+          echo "No credentials found."
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Audit Python dependencies
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run --with pip-audit pip-audit --strict || \
+            echo "::warning::pip-audit reported findings — review before release"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Audit npm dependencies
+        working-directory: frontend
+        run: npm audit --audit-level=high || echo "::warning::npm audit reported findings"

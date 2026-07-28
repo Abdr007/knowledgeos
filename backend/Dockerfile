@@ -21,7 +21,17 @@ RUN uv sync --frozen --no-dev --no-install-project 2>/dev/null \
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./
-RUN uv sync --no-dev 2>/dev/null || true
+
+# The project is NOT installed as a package, deliberately.
+#
+# `uv sync` without --no-install-project builds a wheel into site-packages, so
+# `app` would exist twice: once there and once at /app/app. Which one Python
+# imports depends on sys.path order, and a wheel built from a cached layer
+# silently shadows the real source — producing ModuleNotFoundError for a module
+# that is visibly present in the image.
+#
+# This is a service, not a library. It is imported from the working directory,
+# with PYTHONPATH set explicitly in the runtime stage so resolution cannot drift.
 
 
 FROM python:3.12-slim AS runtime
@@ -53,14 +63,17 @@ RUN mkdir -p /data/storage /home/app/.cache \
     && chown -R app:app /data /home/app
 
 ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH=/app \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     HOME=/home/app
 
+COPY --chown=app:app entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 USER app
 EXPOSE 8000
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
-# --proxy-headers so client IPs survive the load balancer, which matters for
-# rate limiting and audit logs.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# tini reaps zombies and forwards signals, so `docker stop` is a clean shutdown
+# rather than a ten-second wait followed by SIGKILL mid-request.
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/entrypoint.sh"]

@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     app_name: str = "KnowledgeOS AI"
     environment: Environment = Environment.LOCAL
     debug: bool = False
+    #: Interactive API docs. Off in production by default, because an OpenAPI
+    #: schema enumerates every endpoint and parameter for an attacker.
+    #:
+    #: Overridable, and deliberately so: on a public portfolio deployment whose
+    #: source is already on GitHub, the API shape is public regardless, so the
+    #: disclosure argument does not apply and the docs are worth more open than
+    #: closed. Decoupled from `environment` so enabling them does not also
+    #: weaken cookie security or drop HSTS.
+    docs_enabled: bool | None = None
     api_v1_prefix: str = "/api/v1"
     #: Origins allowed to call the API from a browser. Never "*" in production —
     #: this API is cookie- and token-authenticated and serves tenant data.
@@ -137,7 +146,9 @@ class Settings(BaseSettings):
     relevance_floor: float = 0.58
 
     # ── storage ──────────────────────────────────────────────────────────
-    storage_backend: Literal["local", "s3"] = "local"
+    #: "postgres" shares objects between the API and the worker without a
+    #: shared volume, which most container platforms cannot provide.
+    storage_backend: Literal["local", "postgres", "s3"] = "local"
     storage_local_path: str = "./storage"
     s3_bucket: str | None = None
     s3_region: str | None = None
@@ -188,12 +199,33 @@ class Settings(BaseSettings):
         return self.environment is Environment.PRODUCTION
 
     @property
+    def expose_docs(self) -> bool:
+        return (not self.is_production) if self.docs_enabled is None else self.docs_enabled
+
+    @property
     def is_test(self) -> bool:
         return self.environment is Environment.TEST
 
     @property
     def sqlalchemy_url(self) -> str:
-        return str(self.database_url)
+        """Database URL with an explicit driver.
+
+        Managed platforms hand out `postgres://` (Heroku's legacy form, still
+        emitted by Railway and others) or a bare `postgresql://`. SQLAlchemy 2
+        rejects the first outright and resolves the second to psycopg2, which is
+        not installed — this project uses psycopg 3. Normalising here means the
+        same image runs on any platform without the operator having to rewrite a
+        connection string by hand.
+        """
+        url = str(self.database_url)
+        for prefix in ("postgresql+psycopg://", "postgresql+psycopg2://", "postgresql+asyncpg://"):
+            if url.startswith(prefix):
+                return url
+        if url.startswith("postgres://"):
+            return "postgresql+psycopg://" + url[len("postgres://") :]
+        if url.startswith("postgresql://"):
+            return "postgresql+psycopg://" + url[len("postgresql://") :]
+        return url
 
     @property
     def llm_api_key(self) -> str | None:

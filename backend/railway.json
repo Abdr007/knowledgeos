@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "//": "Migrations run as a PRE-DEPLOY step, never at application start — N replicas booting together would race Alembic (TDD §19). Alembic is idempotent, so the worker service running it too is a harmless no-op.",
+    "preDeployCommand": ["alembic upgrade head"],
+    "healthcheckPath": "/healthz",
+    "healthcheckTimeout": 120,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 5
+  }
+}

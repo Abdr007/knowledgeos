@@ -1,0 +1,140 @@
+{
+  "$comment": [
+    "Golden set for the KnowledgeOS design document (docs/KnowledgeOS_AI_TDD.pdf).",
+    "",
+    "GROUND TRUTH IS LEXICAL, NOT RETRIEVED. Each answerable question names a",
+    "distinctive phrase that appears verbatim in the source document. The harness",
+    "resolves relevant chunk ids by exact substring match in Postgres — never by",
+    "running the retriever. Labelling with the system under test would make every",
+    "metric circular and guarantee a perfect score.",
+    "",
+    "The corpus is a real document and the questions are ones a reader of it would",
+    "actually ask. No fabricated documents, no model-generated question/answer",
+    "pairs: a golden set written by a model measures agreement with that model, and",
+    "would score highest exactly where the system shares its blind spots."
+  ],
+
+  "corpus": {
+    "document": "KnowledgeOS_AI_TDD.pdf",
+    "description": "The project's own technical design document, 50 pages."
+  },
+
+  "answerable": [
+    {
+      "id": "rrf-vs-weighted",
+      "question": "Why was Reciprocal Rank Fusion chosen instead of a weighted score blend?",
+      "evidence": ["incomparable scales", "rank fusion needs no score normalization"]
+    },
+    {
+      "id": "tenant-isolation",
+      "question": "How is tenant isolation enforced?",
+      "evidence": ["Enforced twice", "payload filter"]
+    },
+    {
+      "id": "refusal-gate",
+      "question": "What happens when retrieval finds nothing relevant to the question?",
+      "evidence": ["without calling the LLM at all", "refusal gate"]
+    },
+    {
+      "id": "worker-crash",
+      "question": "How does the ingestion pipeline survive a worker crashing mid-job?",
+      "evidence": ["BRPOPLPUSH", "visibility timeout"]
+    },
+    {
+      "id": "sse-not-websockets",
+      "question": "Why use Server-Sent Events rather than WebSockets for streaming?",
+      "evidence": ["unidirectional", "reconnects natively"]
+    },
+    {
+      "id": "argon2",
+      "question": "Which password hashing algorithm is used and why?",
+      "evidence": ["Argon2id", "memory-hard"]
+    },
+    {
+      "id": "uuidv7",
+      "question": "Why are primary keys UUIDv7 instead of UUIDv4?",
+      "evidence": ["time-ordered", "index locality"]
+    },
+    {
+      "id": "ssrf-metadata",
+      "question": "How is server-side request forgery prevented on URL ingestion?",
+      "evidence": ["169.254.169.254", "DNS rebinding"]
+    },
+    {
+      "id": "chunk-overlap",
+      "question": "Why do chunks overlap and by how much?",
+      "evidence": ["150 characters", "straddling claim"]
+    },
+    {
+      "id": "embedding-migration",
+      "question": "How would the embedding model be changed without downtime?",
+      "evidence": ["dual-write", "second Qdrant collection"]
+    },
+    {
+      "id": "refresh-reuse",
+      "question": "What happens if a stolen refresh token is replayed?",
+      "evidence": ["reuse detection", "revokes the whole family"]
+    },
+    {
+      "id": "citations-table",
+      "question": "Why are citations stored in their own table rather than as JSON?",
+      "evidence": ["GROUP BY instead of a scan"]
+    },
+    {
+      "id": "generated-tsvector",
+      "question": "How does the search vector stay in sync with the chunk text?",
+      "evidence": ["GENERATED ALWAYS", "not separately writable"]
+    },
+    {
+      "id": "quantization",
+      "question": "What vector quantization is used and what does it cost?",
+      "evidence": ["int8", "scalar quantization"]
+    },
+    {
+      "id": "denylist-fail-closed",
+      "question": "What happens to authentication if Redis becomes unavailable?",
+      "evidence": ["fails closed", "un-revoke every revoked token"]
+    },
+    {
+      "id": "migrations-predeploy",
+      "question": "When are database migrations applied during a deployment?",
+      "evidence": ["pre-deploy job", "race Alembic"]
+    },
+    {
+      "id": "postgres-source-of-truth",
+      "question": "Which store is authoritative, Postgres or the vector database?",
+      "evidence": ["source of truth", "derived index"]
+    },
+    {
+      "id": "prompt-injection",
+      "question": "How is prompt injection from an uploaded document contained?",
+      "evidence": ["never an instruction", "untrusted"]
+    },
+    {
+      "id": "local-embeddings",
+      "question": "Why are embeddings computed locally instead of through an API?",
+      "evidence": ["no embeddings API", "leaving the deployment"]
+    },
+    {
+      "id": "cross-tenant-404",
+      "question": "What status code is returned for another tenant's resource?",
+      "evidence": ["404", "confirms the resource exists"]
+    }
+  ],
+
+  "unanswerable": [
+    {
+      "id": "nbd-share-price",
+      "question": "What is the current share price of Emirates NBD and who is their CFO?"
+    },
+    { "id": "biryani", "question": "What is the best recipe for chicken biryani?" },
+    { "id": "world-cup", "question": "Who won the 2018 FIFA World Cup final and what was the score?" },
+    { "id": "metro-hours", "question": "What time does the Dubai Metro stop running on Fridays?" },
+    { "id": "weather", "question": "What will the weather be in Abu Dhabi tomorrow afternoon?" },
+    { "id": "stripe-webhooks", "question": "How do I verify a Stripe webhook signature in Ruby on Rails?" },
+    { "id": "k8s-operators", "question": "How do I write a Kubernetes operator with a custom resource definition?" },
+    { "id": "visa-rules", "question": "What are the UAE golden visa eligibility requirements for investors?" },
+    { "id": "tax-filing", "question": "When is the corporate tax filing deadline in Saudi Arabia?" },
+    { "id": "flight-booking", "question": "What is the cheapest airline route from Dubai to Manila in December?" }
+  ]
+}

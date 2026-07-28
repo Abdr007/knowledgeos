@@ -1,0 +1,31 @@
+# Build context hygiene. Without this the local virtualenv (~500 MB) is uploaded
+# to the builder on every deploy, and any .env in the directory would be baked
+# into an image layer.
+#
+# EVERY DIRECTORY PATTERN IS ANCHORED WITH A LEADING SLASH, deliberately.
+# An unanchored `storage/` matches a directory named "storage" at ANY depth under
+# BuildKit, and only at the context root under some other matchers — so it
+# silently removed app/providers/storage/ from the image on the build platform
+# while building perfectly on the developer's machine. That surfaced as a
+# ModuleNotFoundError at container start, long after the build reported success.
+
+/.venv/
+/venv/
+/tests/
+/storage/
+/.model_cache/
+
+/.env
+/.env.*
+!/.env.example
+
+# Safe unanchored: these names are unambiguous and should never survive into an
+# image no matter where they appear.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/

@@ -13,7 +13,7 @@ BACKEND := cd backend &&
 VENV := backend/.venv/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs ps migrate revision seed test lint format typecheck check \
+.PHONY: help up down logs ps migrate revision seed test eval lint format typecheck check \
         dev-api dev-worker dev-web install clean nuke scan demo
 
 help: ## Show this help
@@ -54,6 +54,9 @@ seed: ## Create a demo account and ingest the design document
 	$(VENV)/python scripts/seed.py
 
 # ── quality ──────────────────────────────────────────────────────────────
+
+eval: ## Measure retrieval quality (ABLATE=1 to compare dense/sparse/hybrid)
+	$(BACKEND) ../$(VENV)/python evals/harness.py $(if $(ABLATE),--ablate,)
 
 test: ## Run the test suite against real Postgres, Redis and Qdrant
 	$(BACKEND) ENVIRONMENT=test LLM_PROVIDER=scripted ../$(VENV)/pytest tests -q
