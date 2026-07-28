@@ -83,3 +83,43 @@ def check_qdrant() -> bool:
     except Exception:
         logger.exception("qdrant health check failed")
         return False
+
+
+def check_vector_store() -> bool:
+    """Probe the vector backend that is actually CONFIGURED.
+
+    Readiness must reflect the dependencies this deployment has, not a
+    hard-coded list. Probing Qdrant while running on pgvector reports `degraded`
+    forever — which is worse than having no probe at all, because a readiness
+    endpoint that is always failing trains everyone to ignore it, and most
+    orchestrators respond by pulling the instance out of the load balancer.
+    """
+    settings = get_settings()
+
+    if settings.vector_backend == "qdrant":
+        return check_qdrant()
+
+    if settings.vector_backend == "pgvector":
+        # Vectors live in Postgres, so the database check already covers
+        # reachability. What it does not cover is whether the schema the store
+        # needs is actually present, which is the failure worth catching here.
+        from sqlalchemy import text
+
+        from app.db.session import engine
+
+        try:
+            with engine.connect() as conn:
+                return bool(
+                    conn.execute(
+                        text(
+                            "SELECT 1 FROM information_schema.columns "
+                            "WHERE table_name = 'chunks' AND column_name = 'embedding'"
+                        )
+                    ).first()
+                )
+        except Exception:
+            logger.exception("pgvector health check failed")
+            return False
+
+    logger.error("unknown vector backend", extra={"backend": settings.vector_backend})
+    return False

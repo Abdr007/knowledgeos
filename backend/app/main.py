@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
-from app.core.clients import check_qdrant, check_redis
+from app.core.clients import check_redis, check_vector_store
 from app.core.config import get_settings
 from app.core.errors import AppError, RateLimitError
 from app.core.headers import SecurityHeadersMiddleware
@@ -178,10 +178,12 @@ def healthz() -> dict[str, str]:
 
 @app.get("/readyz", tags=["health"], summary="Readiness")
 def readyz() -> JSONResponse:
+    # Keyed by the configured backend so the report names what is actually
+    # deployed rather than a fixed list of services.
     checks = {
         "database": check_database(),
         "redis": check_redis(),
-        "qdrant": check_qdrant(),
+        f"vectors ({settings.vector_backend})": check_vector_store(),
     }
     ready = all(checks.values())
     return JSONResponse(
