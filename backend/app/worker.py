@@ -19,6 +19,8 @@ from types import FrameType
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.db.models.content import Document, IngestionJob
+from app.db.models.enums import DocumentStatus, JobStatus
 from app.db.session import SessionLocal
 from app.providers.vector.registry import get_vector_store
 from app.services import queue
@@ -120,6 +122,45 @@ def consume_forever(stop: threading.Event | None = None) -> int:
         job, raw = claimed
         db = SessionLocal()
         try:
+            # POISON-PILL GUARD.
+            #
+            # The queue payload carries its own attempt counter, but the reaper
+            # re-enqueues the ORIGINAL payload when a worker dies without
+            # acknowledging — so a job that kills its worker (an OOM on a large
+            # document, say) comes back with attempt=0 every time and is retried
+            # forever, taking the service down on each pass. The exception-based
+            # retry below never runs, because a killed process catches nothing.
+            #
+            # The durable attempt count lives on the job row, incremented and
+            # committed BEFORE the risky work starts, so it survives a kill. This
+            # is the only place that can see it.
+            persisted = db.get(IngestionJob, job.job_id) if job.job_id else None
+            if persisted is not None and persisted.attempts >= MAX_ATTEMPTS:
+                logger.error(
+                    "abandoning job that repeatedly killed its worker",
+                    extra={
+                        "event": "ingest.poison_pill",
+                        "document_id": str(job.document_id),
+                        "attempts": persisted.attempts,
+                    },
+                )
+                document = db.get(Document, job.document_id)
+                if document is not None:
+                    document.status = DocumentStatus.FAILED
+                    document.error_message = (
+                        f"Processing failed {persisted.attempts} times without completing. "
+                        "The document is most likely too large for this instance's memory. "
+                        "Try a smaller file, or run the full stack where the worker has its "
+                        "own process."
+                    )
+                persisted.status = JobStatus.FAILED
+                persisted.last_error = (
+                    "worker terminated repeatedly (suspected resource exhaustion)"
+                )
+                db.commit()
+                queue.acknowledge(raw)
+                continue
+
             process_document(db, document_id=job.document_id, job_id=job.job_id)
             queue.acknowledge(raw)
         except Exception as exc:
