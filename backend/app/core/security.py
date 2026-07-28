@@ -51,7 +51,15 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, password_hash: str | None) -> bool:
     """Constant-time-ish verification that never reveals whether the user exists."""
     if password_hash is None:
-        _hasher.verify(_DUMMY_HASH, "wrong")  # burn the same CPU; always raises
+        # Burn the same CPU as a real verification so a missing account and a
+        # wrong password take the same wall-clock time. The dummy comparison
+        # always mismatches, so its exception is expected and swallowed —
+        # letting it escape would turn "unknown email" into a 500 and give the
+        # timing oracle back as a status-code oracle.
+        try:
+            _hasher.verify(_DUMMY_HASH, "wrong")
+        except (VerifyMismatchError, VerificationError, InvalidHashError):
+            pass
         return False
     try:
         _hasher.verify(password_hash, password)

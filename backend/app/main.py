@@ -21,8 +21,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.v1.router import api_router
 from app.core.clients import check_qdrant, check_redis
 from app.core.config import get_settings
+from app.core.errors import AppError, RateLimitError
 from app.core.logging import RequestContextMiddleware, configure_logging
 from app.db.session import check_database
 
@@ -81,6 +83,35 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    """Translate the domain hierarchy to HTTP once, at the boundary (§17).
+
+    Services raise domain errors and never build an HTTPException, which is what
+    keeps them framework-free and reusable by the ingestion worker.
+    """
+    request_id = getattr(request.state, "request_id", None)
+    headers: dict[str, str] = {}
+    if isinstance(exc, RateLimitError):
+        headers["Retry-After"] = str(exc.retry_after)
+
+    # 5xx means we broke something; log it with a stack trace. 4xx is the client
+    # being told "no", which is normal traffic and not worth a stack trace.
+    if exc.status_code >= 500:
+        logger.exception("domain error", extra={"error": exc.error, "path": request.url.path})
+    else:
+        logger.info(
+            "request rejected",
+            extra={"error": exc.error, "status": exc.status_code, "path": request.url.path},
+        )
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=exc.to_payload(request_id),
+        headers=headers,
+    )
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(
     request: Request, exc: RequestValidationError
@@ -113,6 +144,9 @@ async def unhandled_error_handler(request: Request, exc: Exception) -> JSONRespo
             "request_id": getattr(request.state, "request_id", None),
         },
     )
+
+
+app.include_router(api_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/healthz", tags=["health"], summary="Liveness")
