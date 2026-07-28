@@ -37,9 +37,7 @@ class Base(DeclarativeBase):
 class UUIDPrimaryKey:
     """Time-ordered primary key. See app.core.ids for why v7 and not v4."""
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=uuid7
-    )
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid7)
 
 
 class TimestampMixin:

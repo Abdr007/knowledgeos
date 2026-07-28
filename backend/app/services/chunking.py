@@ -96,10 +96,19 @@ def _absorb_fragments(windows: list[str], *, target: int) -> list[str]:
     signal — and it is exactly the text a user's query is likely to echo.
     Only genuinely orphaned fragments, with no neighbour that has room, are dropped.
     """
+    windows = [w for w in windows if w]
+    if not windows:
+        return []
+
+    # A genuinely short document — a one-line note, a short memo — is ONE chunk
+    # below the minimum, and it must survive. The minimum exists to discard
+    # fragments produced by splitting, not to make small documents unindexable:
+    # dropping it here would produce zero chunks and fail ingestion outright.
+    if len(windows) == 1:
+        return windows
+
     out: list[str] = []
     for window in windows:
-        if not window:
-            continue
         if len(window) >= MIN_CHUNK_CHARS:
             out.append(window)
             continue

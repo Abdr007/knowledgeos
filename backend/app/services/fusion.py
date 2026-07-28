@@ -114,15 +114,36 @@ def diversify(
         if document_id is not None:
             per_document[document_id] = per_document.get(document_id, 0) + 1
 
-    # If diversity filtering left us short, backfill by pure relevance rather
-    # than returning fewer sources than the caller asked for.
-    if len(selected) < limit:
+    # Backfill in two passes when diversity filtering left us short.
+    #
+    # The first pass still honours the per-document cap, so a single document
+    # cannot reclaim the whole context simply by having been filtered as
+    # near-duplicate. Only if that is still not enough does the second pass
+    # ignore the cap — returning fewer sources than asked for is worse than an
+    # unbalanced set, but it is the last resort, not the first.
+    def _backfill(*, respect_cap: bool) -> None:
         chosen = {h.chunk_id for h in selected}
         for hit in hits:
             if len(selected) >= limit:
-                break
-            if hit.chunk_id not in chosen:
-                selected.append(hit)
+                return
+            if hit.chunk_id in chosen:
+                continue
+            document_id = documents.get(hit.chunk_id)
+            if (
+                respect_cap
+                and document_id is not None
+                and per_document.get(document_id, 0) >= max_per_document
+            ):
+                continue
+            selected.append(hit)
+            chosen.add(hit.chunk_id)
+            if document_id is not None:
+                per_document[document_id] = per_document.get(document_id, 0) + 1
+
+    if len(selected) < limit:
+        _backfill(respect_cap=True)
+    if len(selected) < limit:
+        _backfill(respect_cap=False)
 
     return selected[:limit]
 

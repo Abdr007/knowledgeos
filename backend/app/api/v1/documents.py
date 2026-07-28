@@ -6,7 +6,7 @@ import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, File, Query, Request, UploadFile, status
+from fastapi import APIRouter, File, Query, UploadFile, status
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession, WsContext
@@ -103,13 +103,17 @@ async def upload_document(
 )
 def ingest_url(payload: UrlIngestRequest, ctx: WsContext, db: DbSession) -> UploadAccepted:
     ctx.require(Role.MEMBER)
-    check_rate_limit(str(ctx.user.id), action="upload", limit=settings.rate_limit_upload_per_minute)
+    check_rate_limit(
+        str(ctx.user.id), action="upload", limit=settings.rate_limit_upload_per_minute
+    )
 
     # SSRF-guarded: resolves DNS, rejects private ranges, pins the vetted IP and
     # re-validates every redirect (§18 / url_fetcher).
     fetched = url_fetcher.fetch(str(payload.url))
 
-    source_type = SourceType.PDF if fetched.content_type == "application/pdf" else SourceType.URL
+    source_type = (
+        SourceType.PDF if fetched.content_type == "application/pdf" else SourceType.URL
+    )
     result = document_service.intake_bytes(
         db,
         workspace_id=ctx.workspace.id,

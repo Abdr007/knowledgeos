@@ -12,12 +12,13 @@ domain errors. The worker and the test suite use it without an HTTP stack.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, select, update
 from sqlalchemy.orm import Session
 
 from app.core.clients import get_redis
@@ -30,6 +31,28 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 _DENYLIST_PREFIX = "kos:v1:auth:jti"
+
+
+def _coerce_ip(value: str | None) -> str | None:
+    """Return ``value`` only if it is a real IP address, else None.
+
+    ``ip`` is a Postgres INET column, which rejects anything that is not an
+    address — and ``request.client.host`` is not guaranteed to be one. Behind a
+    unix socket, some proxy configurations, or a test client, it is a hostname
+    or a label like "testclient", and inserting it raises DataError and turns
+    every login into a 500.
+
+    The address is diagnostic metadata, so an unparseable value is dropped rather
+    than allowed to fail authentication.
+    """
+    if not value:
+        return None
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        logger.debug("discarding non-IP client address", extra={"value": value[:64]})
+        return None
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +78,7 @@ def issue(
         family_id=family_id or uuid.uuid4(),
         token_hash=hash_refresh_token(token),
         expires_at=datetime.now(UTC) + timedelta(days=settings.refresh_token_ttl_days),
-        ip=ip,
+        ip=_coerce_ip(ip),
         user_agent=(user_agent or "")[:400] or None,
     )
     db.add(record)
@@ -117,7 +140,7 @@ def rotate(
 
 def revoke_family(db: Session, *, family_id: uuid.UUID) -> int:
     """Revoke every token in a family. Returns the number newly revoked."""
-    result = db.execute(
+    result: CursorResult = db.execute(  # type: ignore[assignment]
         update(RefreshToken)
         .where(RefreshToken.family_id == family_id, RefreshToken.revoked_at.is_(None))
         .values(revoked_at=datetime.now(UTC))
@@ -128,7 +151,7 @@ def revoke_family(db: Session, *, family_id: uuid.UUID) -> int:
 
 def revoke_all_for_user(db: Session, *, user_id: uuid.UUID) -> int:
     """Log the user out everywhere. Used on password change and by incident response."""
-    result = db.execute(
+    result: CursorResult = db.execute(  # type: ignore[assignment]
         update(RefreshToken)
         .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
         .values(revoked_at=datetime.now(UTC))
@@ -144,7 +167,9 @@ def revoke_by_token(db: Session, *, presented_token: str) -> None:
     in the same family alive, which is not what "log out" means to a user.
     """
     record = db.scalar(
-        select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(presented_token))
+        select(RefreshToken).where(
+            RefreshToken.token_hash == hash_refresh_token(presented_token)
+        )
     )
     if record is not None:
         revoke_family(db, family_id=record.family_id)

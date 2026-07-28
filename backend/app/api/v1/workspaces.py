@@ -31,7 +31,9 @@ OrgMembership = Annotated[tuple[Organization, Role], Depends(organization_member
 # ── organizations ────────────────────────────────────────────────────────
 
 
-@router.get("/organizations", response_model=list[OrganizationOut], summary="List my organizations")
+@router.get(
+    "/organizations", response_model=list[OrganizationOut], summary="List my organizations"
+)
 def list_organizations(user: CurrentUser, db: DbSession) -> list[OrganizationOut]:
     # Counts come from correlated subqueries rather than N+1 follow-up queries;
     # an organization list is rendered on every page load.
@@ -168,9 +170,7 @@ def create_workspace(
 
     slug = slugify(payload.name, fallback="workspace")
     exists = db.scalar(
-        select(Workspace.id).where(
-            Workspace.org_id == organization.id, Workspace.slug == slug
-        )
+        select(Workspace.id).where(Workspace.org_id == organization.id, Workspace.slug == slug)
     )
     if exists is not None:
         raise ConflictError(f"A workspace with the slug '{slug}' already exists.")
@@ -210,7 +210,9 @@ def get_workspace(ctx: WsContext, db: DbSession) -> WorkspaceOut:
             func.count(Document.id).filter(Document.status == DocumentStatus.READY),
         ).where(Document.workspace_id == w.id)
     ).one()
-    chunks = db.scalar(select(func.count()).select_from(Chunk).where(Chunk.workspace_id == w.id))
+    chunks = db.scalar(
+        select(func.count()).select_from(Chunk).where(Chunk.workspace_id == w.id)
+    )
     return WorkspaceOut(
         id=w.id,
         org_id=w.org_id,
@@ -273,9 +275,37 @@ def delete_workspace(ctx: WsContext, db: DbSession) -> Message:
     summary="List every workspace the caller can access",
 )
 def list_all_workspaces(user: CurrentUser, db: DbSession) -> list[WorkspaceOut]:
-    """Flat list across organizations — what the workspace switcher renders."""
+    """Flat list across organizations — what the workspace switcher renders.
+
+    Counts are included deliberately. This endpoint is what the client uses to
+    decide whether a workspace has anything to answer from; returning zeros here
+    made the UI report "0 documents indexed" and disable the composer on a
+    workspace that had just finished ingesting.
+    """
+    doc_count = (
+        select(func.count())
+        .select_from(Document)
+        .where(Document.workspace_id == Workspace.id)
+        .scalar_subquery()
+    )
+    ready_count = (
+        select(func.count())
+        .select_from(Document)
+        .where(
+            Document.workspace_id == Workspace.id,
+            Document.status == DocumentStatus.READY,
+        )
+        .scalar_subquery()
+    )
+    chunk_count = (
+        select(func.count())
+        .select_from(Chunk)
+        .where(Chunk.workspace_id == Workspace.id)
+        .scalar_subquery()
+    )
+
     rows = db.execute(
-        select(Workspace, Membership.role)
+        select(Workspace, Membership.role, doc_count, ready_count, chunk_count)
         .join(Membership, Membership.org_id == Workspace.org_id)
         .where(Membership.user_id == user.id)
         .order_by(Workspace.created_at)
@@ -289,8 +319,11 @@ def list_all_workspaces(user: CurrentUser, db: DbSession) -> list[WorkspaceOut]:
             description=w.description,
             created_at=w.created_at,
             role=Role(role),
+            document_count=dc,
+            ready_document_count=rc,
+            chunk_count=cc,
         )
-        for w, role in rows
+        for w, role, dc, rc, cc in rows
     ]
 
 

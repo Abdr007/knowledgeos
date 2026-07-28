@@ -146,7 +146,9 @@ def authenticate(db: Session, *, email: str, password: str) -> User:
     return user
 
 
-def load_memberships(db: Session, *, user_id: uuid.UUID) -> list[tuple[Membership, Organization]]:
+def load_memberships(
+    db: Session, *, user_id: uuid.UUID
+) -> list[tuple[Membership, Organization]]:
     rows = db.execute(
         select(Membership, Organization)
         .join(Organization, Organization.id == Membership.org_id)

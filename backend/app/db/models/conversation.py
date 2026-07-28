@@ -67,12 +67,16 @@ class Message(UUIDPrimaryKey, TimestampMixin, Base):
     """
 
     __tablename__ = "messages"
-    __table_args__ = (Index("ix_messages_conversation_created", "conversation_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_messages_conversation_created", "conversation_id", "created_at"),
+    )
 
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
     )
-    role: Mapped[MessageRole] = mapped_column(_enum(MessageRole, "message_role"), nullable=False)
+    role: Mapped[MessageRole] = mapped_column(
+        _enum(MessageRole, "message_role"), nullable=False
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     model: Mapped[str | None] = mapped_column(String(120))

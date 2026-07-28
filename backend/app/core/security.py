@@ -8,6 +8,7 @@ session lifetime.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import logging
@@ -56,10 +57,8 @@ def verify_password(password: str, password_hash: str | None) -> bool:
         # always mismatches, so its exception is expected and swallowed —
         # letting it escape would turn "unknown email" into a 500 and give the
         # timing oracle back as a status-code oracle.
-        try:
+        with contextlib.suppress(VerifyMismatchError, VerificationError, InvalidHashError):
             _hasher.verify(_DUMMY_HASH, "wrong")
-        except (VerifyMismatchError, VerificationError, InvalidHashError):
-            pass
         return False
     try:
         _hasher.verify(password_hash, password)

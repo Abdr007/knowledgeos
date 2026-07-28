@@ -49,7 +49,9 @@ def estimate_cost_usd(model: str, *, input_tokens: int, output_tokens: int) -> D
         logger.warning("no price table entry for model", extra={"model": model})
         return Decimal(0)
     input_price, output_price = prices
-    cost = (Decimal(input_tokens) * input_price + Decimal(output_tokens) * output_price) / _MILLION
+    cost = (
+        Decimal(input_tokens) * input_price + Decimal(output_tokens) * output_price
+    ) / _MILLION
     return cost.quantize(Decimal("0.000001"))
 
 
@@ -73,7 +75,9 @@ def record_usage(
         model=model,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
-        cost_usd=estimate_cost_usd(model, input_tokens=input_tokens, output_tokens=output_tokens),
+        cost_usd=estimate_cost_usd(
+            model, input_tokens=input_tokens, output_tokens=output_tokens
+        ),
         latency_ms=latency_ms,
     )
     db.add(event)

@@ -63,7 +63,9 @@ def _assert_public(ip_text: str) -> None:
         or ip.is_multicast
         or ip.is_unspecified
     ):
-        raise ValidationError("That URL resolves to a non-public address and cannot be fetched.")
+        raise ValidationError(
+            "That URL resolves to a non-public address and cannot be fetched."
+        )
 
 
 def _resolve(host: str, port: int) -> str:
@@ -76,20 +78,23 @@ def _resolve(host: str, port: int) -> str:
 
     # Every resolved address must be public. A hostname with one public and one
     # private A record would otherwise be a coin flip on each connection.
-    addresses = {info[4][0] for info in infos}
+    # sockaddr is a union across address families; element 0 is the address in
+    # every family, but the stub types it as str | int.
+    addresses = {str(info[4][0]) for info in infos}
     for address in addresses:
         _assert_public(address)
     return next(iter(addresses))
 
 
-def _vet(url: str) -> tuple[str, str, int]:
+def _vet(url: str) -> tuple[str, str, int]:  # (resolved_ip, host, port)
     parsed = urlparse(url)
     if parsed.scheme not in _ALLOWED_SCHEMES:
         raise ValidationError("Only http and https URLs can be ingested.")
     if not parsed.hostname:
         raise ValidationError("That URL has no host.")
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    return _resolve(parsed.hostname, port), parsed.hostname, port
+    port = int(parsed.port or (443 if parsed.scheme == "https" else 80))
+    host: str = parsed.hostname
+    return _resolve(host, port), host, port
 
 
 def fetch(url: str) -> FetchedResource:
@@ -97,7 +102,7 @@ def fetch(url: str) -> FetchedResource:
     current = url
 
     for _hop in range(MAX_REDIRECTS + 1):
-        ip, host, _port = _vet(current)
+        _ip, host, _port = _vet(current)
 
         # Pin the connection to the vetted IP while keeping the Host header, so
         # the address we checked is the address we connect to (control 3).
@@ -121,22 +126,26 @@ def fetch(url: str) -> FetchedResource:
             continue
 
         if response.status_code >= 400:
-            raise ValidationError(
-                f"The URL returned HTTP {response.status_code}."
-            )
+            raise ValidationError(f"The URL returned HTTP {response.status_code}.")
 
-        content_type = (response.headers.get("content-type") or "").split(";")[0].strip().lower()
+        content_type = (
+            (response.headers.get("content-type") or "").split(";")[0].strip().lower()
+        )
         if content_type and not any(content_type.startswith(a) for a in _ALLOWED_CONTENT_TYPES):
             raise ValidationError(f"Unsupported content type at that URL: {content_type}.")
 
         content = response.content
         if len(content) > MAX_BYTES:
-            raise ValidationError("That URL returned more data than the ingestion limit allows.")
+            raise ValidationError(
+                "That URL returned more data than the ingestion limit allows."
+            )
 
         logger.info(
             "fetched url for ingestion",
             extra={"event": "ingest.url_fetched", "host": host, "bytes": len(content)},
         )
-        return FetchedResource(url=current, content=content, content_type=content_type or "text/html")
+        return FetchedResource(
+            url=current, content=content, content_type=content_type or "text/html"
+        )
 
     raise ValidationError("Too many redirects.")

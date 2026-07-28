@@ -45,7 +45,9 @@ def _sse(event: str, data: object) -> str:
     return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
 
 
-def _load_conversation(db, user, conversation_id: uuid.UUID) -> tuple[Conversation, Workspace, Role]:
+def _load_conversation(
+    db, user, conversation_id: uuid.UUID
+) -> tuple[Conversation, Workspace, Role]:
     row = db.execute(
         select(Conversation, Workspace, Membership.role)
         .join(Workspace, Workspace.id == Conversation.workspace_id)
@@ -104,7 +106,9 @@ def list_conversations(ctx: WsContext, db: DbSession) -> list[ConversationOut]:
     stmt = (
         select(Conversation, count)
         .where(Conversation.workspace_id == ctx.workspace.id)
-        .order_by(Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc())
+        .order_by(
+            Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc()
+        )
         .limit(100)
     )
     if not ctx.role.satisfies(Role.ADMIN):
@@ -140,7 +144,9 @@ def get_messages(
     ).all()
 
     citations = db.scalars(
-        select(Citation).where(Citation.message_id.in_([m.id for m in messages] or [uuid.uuid4()]))
+        select(Citation).where(
+            Citation.message_id.in_([m.id for m in messages] or [uuid.uuid4()])
+        )
     ).all()
     by_message: dict[uuid.UUID, list[Citation]] = {}
     for citation in citations:
@@ -158,7 +164,9 @@ def get_messages(
 
 
 @router.delete(
-    "/conversations/{conversation_id}", response_model=MessageDTO, summary="Delete a conversation"
+    "/conversations/{conversation_id}",
+    response_model=MessageDTO,
+    summary="Delete a conversation",
 )
 def delete_conversation(
     conversation_id: uuid.UUID, user: CurrentUser, db: DbSession
@@ -218,7 +226,7 @@ async def ask(
         # when the handler returns, which happens the moment the response starts
         # streaming — long before this generator is finished with the database.
         stream_db = SessionLocal()
-        outcome = None
+        outcome: chat_service.ChatOutcome | None = None
         try:
             conversation_row = stream_db.get(Conversation, conversation_id_value)
             if conversation_row is None:
@@ -235,6 +243,8 @@ async def ask(
                 user_id=user_id,
             ):
                 if event_name == "__outcome__":
+                    # The sentinel frame carries the ChatOutcome rather than JSON.
+                    assert isinstance(data, chat_service.ChatOutcome)
                     outcome = data
                     continue
 

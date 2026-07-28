@@ -30,6 +30,8 @@ dependencies = [
     "httpx>=0.28",
     "beautifulsoup4>=4.12",
     "anthropic>=0.120.1",
+    # Shipped because the blueprint specifies OpenAI (D1); LLM_PROVIDER selects.
+    "openai>=1.60",
     "fastembed>=0.8.0",
 ]
 
@@ -47,7 +49,16 @@ testpaths = ["tests"]
 addopts = "-q --strict-markers --strict-config"
 # Warnings are errors. A suite that tolerates them accumulates warnings until
 # nobody reads them, and the one that mattered is lost in the noise.
-filterwarnings = ["error"]
+#
+# Exemptions are narrow and justified individually, never a blanket "ignore".
+filterwarnings = [
+    "error",
+    # Starlette's TestClient warns that httpx support is deprecated in favour of
+    # httpx2. Swapping is not ours to make yet: the anthropic and openai SDKs
+    # both pin httpx, so installing httpx2 would fracture the dependency tree to
+    # silence a warning in test-only code. Revisit when those SDKs move.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:",
+]
 
 [tool.ruff]
 line-length = 96
@@ -61,7 +72,16 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S105", "S106"]  # test fixtures carry obvious fake secrets
+"tests/*" = [
+    "S105", "S106",  # fixtures carry obvious fake secrets
+    "S104",          # "0.0.0.0" is DATA here: an address the SSRF guard must reject
+    "S110",          # best-effort Redis cleanup in a fixture; a failure must not fail the test
+    "B017",          # asserting a tampered JWT raises *something* is the point
+    "RUF007",        # zip() over successive chunks reads better than pairwise() here
+]
+# Migrations are generated; reformatting them creates diff noise and the long
+# lines are Alembic's own output.
+"alembic/versions/*" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

@@ -7,7 +7,14 @@ from collections.abc import AsyncIterator
 
 from app.core.config import get_settings
 from app.core.errors import ProviderError, ProviderTimeoutError
-from app.providers.llm.base import ChatTurn, Completion, StreamDone, StreamEvent, StreamUsage, TextDelta
+from app.providers.llm.base import (
+    ChatTurn,
+    Completion,
+    StreamDone,
+    StreamEvent,
+    StreamUsage,
+    TextDelta,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -24,9 +31,7 @@ class AnthropicProvider:
     def _ensure_client(self):
         if self._client is None:
             if not self._api_key:
-                raise ProviderError(
-                    "ANTHROPIC_API_KEY is not configured.", retryable=False
-                )
+                raise ProviderError("ANTHROPIC_API_KEY is not configured.", retryable=False)
             from anthropic import AsyncAnthropic
 
             self._client = AsyncAnthropic(

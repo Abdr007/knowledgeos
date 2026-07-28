@@ -86,7 +86,7 @@ def build_chat_prompt(
         body = html.escape(chunk.content)
         blocks.append(
             f'<source id="{marker}" document="{html.escape(chunk.document_title)}"'
-            f'{page}{section}>\n{body}\n</source>'
+            f"{page}{section}>\n{body}\n</source>"
         )
 
     sources_text = "\n\n".join(blocks) if blocks else "(no sources retrieved)"
@@ -111,9 +111,7 @@ def build_chat_prompt(
 
 
 def build_groundedness_prompt(*, answer: str, chunks: list[RetrievedChunk]) -> str:
-    sources = "\n\n".join(
-        f"[{i}] {c.content[:1200]}" for i, c in enumerate(chunks, start=1)
-    )
+    sources = "\n\n".join(f"[{i}] {c.content[:1200]}" for i, c in enumerate(chunks, start=1))
     return f"SOURCES:\n{sources}\n\nANSWER:\n{answer}\n\nScore:"
 
 

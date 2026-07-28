@@ -128,14 +128,23 @@ async def answer(
             },
         )
 
-        yield "meta", {
-            "message_id": str(outcome.message_id),
-            "sources": [],
-            "provider": provider.name,
-            "model": provider.model,
-            "retrieval_ms": retrieval.took_ms,
-            "refused": True,
-        }
+        yield (
+            "meta",
+            {
+                "message_id": str(outcome.message_id),
+                "sources": [],
+                "provider": provider.name,
+                "model": provider.model,
+                "retrieval_ms": retrieval.took_ms,
+                "refused": True,
+                # Sent even on a refusal so the client can plot where the score
+                # landed relative to the floor. Showing the needle fall below the
+                # line is the clearest possible explanation of why there is no
+                # answer — far better than an unexplained apology.
+                "relevance": round(retrieval.relevance, 4),
+                "floor": settings.relevance_floor,
+            },
+        )
         for piece in REFUSAL_TEXT.split(" "):
             yield "token", {"delta": piece + " "}
         yield "done", {"finish_reason": FinishReason.REFUSED.value}
@@ -155,28 +164,33 @@ async def answer(
 
     # Sources go out BEFORE the first token, so the user can see what the answer
     # will be based on while it is being written (§12).
-    yield "meta", {
-        "message_id": str(outcome.message_id),
-        "provider": provider.name,
-        "model": provider.model,
-        "retrieval_ms": retrieval.took_ms,
-        "context_tokens": built.context_tokens,
-        "refused": False,
-        "sources": [
-            {
-                "marker": i,
-                "chunk_id": str(c.chunk_id),
-                "document_id": str(c.document_id),
-                "document_title": c.document_title,
-                "page_label": c.page_label,
-                "section": c.section,
-                "score": c.score,
-                "found_by_both": c.found_by_both,
-                "snippet": " ".join(c.content.split())[:280],
-            }
-            for i, c in enumerate(built.sources_used, start=1)
-        ],
-    }
+    yield (
+        "meta",
+        {
+            "message_id": str(outcome.message_id),
+            "provider": provider.name,
+            "model": provider.model,
+            "retrieval_ms": retrieval.took_ms,
+            "context_tokens": built.context_tokens,
+            "refused": False,
+            "relevance": round(retrieval.relevance, 4),
+            "floor": settings.relevance_floor,
+            "sources": [
+                {
+                    "marker": i,
+                    "chunk_id": str(c.chunk_id),
+                    "document_id": str(c.document_id),
+                    "document_title": c.document_title,
+                    "page_label": c.page_label,
+                    "section": c.section,
+                    "score": c.score,
+                    "found_by_both": c.found_by_both,
+                    "snippet": " ".join(c.content.split())[:280],
+                }
+                for i, c in enumerate(built.sources_used, start=1)
+            ],
+        },
+    )
 
     # ── stream ───────────────────────────────────────────────────────────
     buffer: list[str] = []
@@ -197,7 +211,9 @@ async def answer(
                 outcome.output_tokens = event.output_tokens
             elif isinstance(event, StreamDone):
                 outcome.finish_reason = (
-                    FinishReason.LENGTH if event.finish_reason == "length" else FinishReason.STOP
+                    FinishReason.LENGTH
+                    if event.finish_reason == "length"
+                    else FinishReason.STOP
                 )
     except Exception as exc:
         # Persist whatever was generated: those tokens were billed whether or not
@@ -206,11 +222,14 @@ async def answer(
         outcome.text = "".join(buffer)
         outcome.latency_ms = int((time.perf_counter() - started) * 1000)
         logger.exception("chat stream failed", extra={"event": "chat.stream_failed"})
-        yield "error", {
-            "error": "provider_error",
-            "detail": str(exc)[:300],
-            "retryable": True,
-        }
+        yield (
+            "error",
+            {
+                "error": "provider_error",
+                "detail": str(exc)[:300],
+                "retryable": True,
+            },
+        )
         yield "__outcome__", outcome
         return
 
@@ -227,18 +246,24 @@ async def answer(
     )
     outcome.latency_ms = int((time.perf_counter() - started) * 1000)
 
-    yield "citations", {
-        "validated": validated.validated_markers,
-        "stripped": validated.stripped_markers,
-        "groundedness": outcome.groundedness,
-    }
-    yield "usage", {
-        "input_tokens": outcome.input_tokens,
-        "output_tokens": outcome.output_tokens,
-        "ttft_ms": outcome.ttft_ms,
-        "latency_ms": outcome.latency_ms,
-        "model": provider.model,
-    }
+    yield (
+        "citations",
+        {
+            "validated": validated.validated_markers,
+            "stripped": validated.stripped_markers,
+            "groundedness": outcome.groundedness,
+        },
+    )
+    yield (
+        "usage",
+        {
+            "input_tokens": outcome.input_tokens,
+            "output_tokens": outcome.output_tokens,
+            "ttft_ms": outcome.ttft_ms,
+            "latency_ms": outcome.latency_ms,
+            "model": provider.model,
+        },
+    )
     yield "done", {"finish_reason": outcome.finish_reason.value}
     yield "__outcome__", outcome
 

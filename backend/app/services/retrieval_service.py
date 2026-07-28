@@ -125,11 +125,18 @@ async def retrieve(
     # Both retrievers are blocking (ONNX inference, psycopg). Running them in
     # threads makes the two round trips overlap instead of accumulate.
     dense_task = asyncio.to_thread(
-        _dense_search, workspace_id=workspace_id, query=query, limit=candidates,
+        _dense_search,
+        workspace_id=workspace_id,
+        query=query,
+        limit=candidates,
         document_ids=document_ids,
     )
     sparse_task = asyncio.to_thread(
-        _sparse_search, db=db, workspace_id=workspace_id, query=query, limit=candidates,
+        _sparse_search,
+        db=db,
+        workspace_id=workspace_id,
+        query=query,
+        limit=candidates,
         document_ids=document_ids,
     )
     dense, sparse = await asyncio.gather(dense_task, sparse_task)
@@ -290,9 +297,58 @@ def _sparse_search(
 # already strips most of these during to_tsvector, but they must also be kept out
 # of the query so ts_rank_cd is not diluted.
 _QUERY_STOPWORDS = frozenset(
-    """a an and are as at be but by can do does for from had has have how i if in into is it
-    its of on or our that the their there these they this to was were what when where which
-    who why will with would you your""".split()
+    [
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "but",
+        "by",
+        "can",
+        "do",
+        "does",
+        "for",
+        "from",
+        "had",
+        "has",
+        "have",
+        "how",
+        "i",
+        "if",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "of",
+        "on",
+        "or",
+        "our",
+        "that",
+        "the",
+        "their",
+        "there",
+        "these",
+        "they",
+        "this",
+        "to",
+        "was",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+        "will",
+        "with",
+        "would",
+        "you",
+        "your",
+    ]
 )
 
 #: Cap on query terms. A pasted paragraph would otherwise build a tsquery with
@@ -324,7 +380,9 @@ def _build_or_tsquery(query: str) -> str | None:
     return " | ".join(terms)
 
 
-def apply_token_budget(chunks: list[RetrievedChunk], *, budget_tokens: int) -> list[RetrievedChunk]:
+def apply_token_budget(
+    chunks: list[RetrievedChunk], *, budget_tokens: int
+) -> list[RetrievedChunk]:
     """Trim the context to fit, keeping the highest-ranked chunks.
 
     Dropping from the tail rather than truncating text mid-chunk: half a chunk is

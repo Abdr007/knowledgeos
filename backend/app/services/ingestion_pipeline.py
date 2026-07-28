@@ -44,11 +44,13 @@ class IngestionResult:
     duration_ms: int
 
 
-class IngestionFailure(Exception):
+class IngestionError(Exception):
     """Parsing or indexing failed for a reason worth showing an operator."""
 
 
-def process_document(db: Session, *, document_id: uuid.UUID, job_id: uuid.UUID | None = None) -> IngestionResult:
+def process_document(
+    db: Session, *, document_id: uuid.UUID, job_id: uuid.UUID | None = None
+) -> IngestionResult:
     """Run the full pipeline for one document. Commits its own state changes.
 
     State transitions are committed as they happen rather than at the end, so a
@@ -59,7 +61,7 @@ def process_document(db: Session, *, document_id: uuid.UUID, job_id: uuid.UUID |
 
     document = db.get(Document, document_id)
     if document is None:
-        raise IngestionFailure(f"Document {document_id} no longer exists.")
+        raise IngestionError(f"Document {document_id} no longer exists.")
 
     job = db.get(IngestionJob, job_id) if job_id else None
 
@@ -118,7 +120,7 @@ def _run(db: Session, document: Document) -> IngestionResult:
     started = datetime.now(UTC)
 
     if not document.storage_key:
-        raise IngestionFailure("Document has no stored content.")
+        raise IngestionError("Document has no stored content.")
 
     raw = get_storage().get(document.storage_key)
 
@@ -130,7 +132,7 @@ def _run(db: Session, document: Document) -> IngestionResult:
         # Overwhelmingly a scanned PDF: an image of text, with no text layer.
         # Failing loudly beats a "successful" document that never appears in an
         # answer and gives no clue why.
-        raise IngestionFailure(
+        raise IngestionError(
             "No extractable text found. Scanned documents need OCR, which this "
             "build does not perform."
         )
@@ -141,7 +143,7 @@ def _run(db: Session, document: Document) -> IngestionResult:
     # ── chunk ────────────────────────────────────────────────────────────
     chunks = chunk_document(parsed)
     if not chunks:
-        raise IngestionFailure("Document produced no chunks.")
+        raise IngestionError("Document produced no chunks.")
 
     # ── replace any previous version ─────────────────────────────────────
     # Reprocessing must not double the corpus. Vectors go first so no window
@@ -167,7 +169,7 @@ def _run(db: Session, document: Document) -> IngestionResult:
     records: list[VectorRecord] = []
     total_tokens = 0
 
-    for text_chunk, vector in zip(chunks, vectors, strict=True):
+    for text_chunk, _vector in zip(chunks, vectors, strict=True):
         vector_id = uuid7()
         row = Chunk(
             document_id=document.id,
@@ -187,6 +189,7 @@ def _run(db: Session, document: Document) -> IngestionResult:
     db.flush()  # assigns chunk ids, which the vector payload needs
 
     for row, vector in zip(rows, vectors, strict=True):
+        assert row.vector_id is not None  # set when the row was constructed
         records.append(
             VectorRecord(
                 vector_id=row.vector_id,

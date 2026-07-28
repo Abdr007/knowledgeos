@@ -28,7 +28,7 @@ def normalize(text: str) -> str:
     Paragraph breaks survive because the chunker splits on them (§11); flattening
     all whitespace here would remove the strongest boundary signal the chunker has.
     """
-    text = text.replace(" ", " ").replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\u00a0", " ").replace("\r\n", "\n").replace("\r", "\n")
     text = _WS.sub(" ", text)
     text = "\n".join(line.strip() for line in text.split("\n"))
     return _BLANKS.sub("\n\n", text).strip()
@@ -65,9 +65,11 @@ class PdfParser:
             if text:
                 pages.append(ParsedPage(number=index, text=text))
 
-        meta = reader.metadata or {}
-        title = (meta.get("/Title") or "").strip() or None
-        return ParsedDocument(pages=pages, title=title, metadata={"pages": str(len(reader.pages))})
+        meta: dict[str, object] = dict(reader.metadata or {})
+        title = str(meta.get("/Title") or "").strip() or None
+        return ParsedDocument(
+            pages=pages, title=title, metadata={"pages": str(len(reader.pages))}
+        )
 
 
 class DocxParser:
@@ -189,7 +191,9 @@ class HtmlParser:
         # Chrome, navigation and boilerplate are noise that dilutes retrieval:
         # every page in a site shares them, so they add no discriminating signal
         # and crowd out the content that does.
-        for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript", "form"]):
+        for tag in soup(
+            ["script", "style", "nav", "footer", "header", "aside", "noscript", "form"]
+        ):
             tag.decompose()
 
         title = (soup.title.string or "").strip() if soup.title and soup.title.string else None

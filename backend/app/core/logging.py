@@ -29,9 +29,31 @@ request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 #: LogRecord attributes that are structure, not payload. Anything outside this
 #: set was attached by a caller via `extra=` and belongs in the JSON output.
 _STANDARD_ATTRS = frozenset(
-    """args asctime created exc_info exc_text filename funcName levelname levelno
-    lineno module msecs message msg name pathname process processName
-    relativeCreated stack_info thread threadName taskName""".split()
+    [
+        "args",
+        "asctime",
+        "created",
+        "exc_info",
+        "exc_text",
+        "filename",
+        "funcName",
+        "levelname",
+        "levelno",
+        "lineno",
+        "module",
+        "msecs",
+        "message",
+        "msg",
+        "name",
+        "pathname",
+        "process",
+        "processName",
+        "relativeCreated",
+        "stack_info",
+        "thread",
+        "threadName",
+        "taskName",
+    ]
 )
 
 

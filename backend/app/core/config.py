@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     db_max_overflow: int = 5
     db_echo: bool = False
 
-    redis_url: RedisDsn = Field(default="redis://localhost:6379/0")
+    redis_url: RedisDsn = Field(default=RedisDsn("redis://localhost:6379/0"))
 
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str | None = None
@@ -110,6 +110,11 @@ class Settings(BaseSettings):
     #: per-token cost, and no document text leaving the deployment — which for
     #: an enterprise knowledge platform is a feature and not a compromise.
     embedding_provider: Literal["local", "openai"] = "local"
+    #: English-only, by decision. Multilingual is a config change, not a
+    #: redesign: the 384-wide drop-in is
+    #: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2, which needs
+    #: no change to the Qdrant collection. Switching later costs a re-embed of
+    #: the corpus and nothing else (TDD §29.3).
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     #: Must match the model above. Wrong here builds the Qdrant collection at the
     #: wrong width, which fails loudly at insert rather than degrading silently.
@@ -207,4 +212,4 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     """Cached accessor. Settings are immutable for the life of the process."""
-    return Settings()  # type: ignore[call-arg]
+    return Settings()

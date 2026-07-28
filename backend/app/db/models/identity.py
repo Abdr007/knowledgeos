@@ -105,9 +105,7 @@ class Workspace(UUIDPrimaryKey, TimestampMixin, Base):
     """The tenancy boundary. Every document, chunk and conversation belongs to one."""
 
     __tablename__ = "workspaces"
-    __table_args__ = (
-        UniqueConstraint("org_id", "slug", name="uq_workspaces_org_slug"),
-    )
+    __table_args__ = (UniqueConstraint("org_id", "slug", name="uq_workspaces_org_slug"),)
 
     org_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -142,9 +140,7 @@ class RefreshToken(UUIDPrimaryKey, TimestampMixin, Base):
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     family_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    token_hash: Mapped[str] = mapped_column(
-        String(64), unique=True, nullable=False, index=True
-    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     #: Set when the token is spent (rotated) or revoked. Non-null means unusable.
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

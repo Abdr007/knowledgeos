@@ -46,9 +46,58 @@ _SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'(\[0-9])")
 _WORD = re.compile(r"\w+")
 
 _STOPWORDS = frozenset(
-    """a an and are as at be but by can do does for from had has have how i if in into is it
-    its of on or our that the their there these they this to was were what when where which
-    who why will with would you your""".split()
+    [
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "but",
+        "by",
+        "can",
+        "do",
+        "does",
+        "for",
+        "from",
+        "had",
+        "has",
+        "have",
+        "how",
+        "i",
+        "if",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "of",
+        "on",
+        "or",
+        "our",
+        "that",
+        "the",
+        "their",
+        "there",
+        "these",
+        "they",
+        "this",
+        "to",
+        "was",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+        "will",
+        "with",
+        "would",
+        "you",
+        "your",
+    ]
 )
 
 

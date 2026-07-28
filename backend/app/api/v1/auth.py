@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, Request, Response, status
+from fastapi import APIRouter, Cookie, Request, Response, status
 
 from app.api.deps import CurrentUser, DbSession, client_ip
 from app.core.config import get_settings
@@ -74,7 +74,9 @@ def register(
     db: DbSession,
 ) -> TokenResponse:
     ip = client_ip(request)
-    check_rate_limit(ip or "anonymous", action="register", limit=settings.rate_limit_auth_per_minute)
+    check_rate_limit(
+        ip or "anonymous", action="register", limit=settings.rate_limit_auth_per_minute
+    )
 
     result = auth_service.register(
         db,
@@ -106,7 +108,9 @@ def login(
     ip = client_ip(request)
     # Limited per IP *and* per email: per-IP alone lets a botnet spray one
     # account, per-email alone lets one host walk a user list.
-    check_rate_limit(ip or "anonymous", action="login-ip", limit=settings.rate_limit_auth_per_minute)
+    check_rate_limit(
+        ip or "anonymous", action="login-ip", limit=settings.rate_limit_auth_per_minute
+    )
     check_rate_limit(
         auth_service.normalize_email(payload.email),
         action="login-email",

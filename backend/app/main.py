@@ -25,6 +25,7 @@ from app.api.v1.router import api_router
 from app.core.clients import check_qdrant, check_redis
 from app.core.config import get_settings
 from app.core.errors import AppError, RateLimitError
+from app.core.headers import SecurityHeadersMiddleware
 from app.core.logging import RequestContextMiddleware, configure_logging
 from app.db.session import check_database
 
@@ -72,6 +73,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Order matters: Starlette runs middleware in reverse registration order,
+# so registering headers first puts it OUTERMOST — its headers are then
+# applied to every response, including ones produced by exception handlers.
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -118,7 +123,10 @@ async def validation_error_handler(
 ) -> JSONResponse:
     """422 with the offending fields named, so a client can fix the call."""
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        # Literal rather than the constant: Starlette renamed
+        # HTTP_422_UNPROCESSABLE_ENTITY to HTTP_422_UNPROCESSABLE_CONTENT and
+        # deprecated the old name. The number is stable; the constant is not.
+        status_code=422,
         content={
             "error": "validation_error",
             "detail": exc.errors(),

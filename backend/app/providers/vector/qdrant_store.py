@@ -13,6 +13,7 @@ defence in depth on the one boundary that must not fail.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 from dataclasses import dataclass
@@ -82,7 +83,9 @@ class QdrantVectorStore:
             # Guard against a model change that silently changes vector width.
             info = self._client.get_collection(self._collection)
             configured = info.config.params.vectors
-            size = configured.size if hasattr(configured, "size") else None
+            # `vectors` is VectorParams | dict[str, VectorParams] | None — only
+            # the single-vector form has a width to compare.
+            size = getattr(configured, "size", None)
             if size is not None and size != self._dimensions:
                 raise RuntimeError(
                     f"Qdrant collection {self._collection!r} has width {size}, but "
@@ -96,14 +99,15 @@ class QdrantVectorStore:
             ("workspace_id", models.PayloadSchemaType.KEYWORD),
             ("document_id", models.PayloadSchemaType.KEYWORD),
         ):
-            try:
+            # Qdrant has no "create index if absent"; a second call raises.
+            # Suppressed rather than pre-checked, because a check would race
+            # against another replica starting at the same moment.
+            with contextlib.suppress(Exception):
                 self._client.create_payload_index(
                     collection_name=self._collection,
                     field_name=field,
                     field_schema=schema,
                 )
-            except Exception:
-                pass  # already exists
 
     # ── writes ───────────────────────────────────────────────────────────
 
@@ -206,7 +210,9 @@ class QdrantVectorStore:
                     )
                 )
             except (KeyError, ValueError):
-                logger.warning("skipping malformed qdrant point", extra={"point_id": str(hit.id)})
+                logger.warning(
+                    "skipping malformed qdrant point", extra={"point_id": str(hit.id)}
+                )
         return out
 
     def count(self, workspace_id: uuid.UUID | None = None) -> int:

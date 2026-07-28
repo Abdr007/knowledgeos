@@ -7,11 +7,9 @@ one directly is how `password_hash` ends up in a JSON response.
 
 from __future__ import annotations
 
-from typing import Annotated, Generic, TypeVar
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
-
-T = TypeVar("T")
 
 
 class Schema(BaseModel):
@@ -24,7 +22,7 @@ class Schema(BaseModel):
     )
 
 
-class Page(Schema, Generic[T]):
+class Page[T](Schema):
     """Cursor-paginated envelope.
 
     Cursor rather than offset: offset pagination re-scans rows on every page and

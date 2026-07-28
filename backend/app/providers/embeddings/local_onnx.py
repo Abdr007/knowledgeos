@@ -29,10 +29,23 @@ settings = get_settings()
 _CACHE_PREFIX = "kos:v1:embed"
 _CACHE_TTL_SECONDS = 7 * 24 * 3600
 
-# BGE models are trained asymmetrically: queries carry an instruction prefix,
-# documents do not. Applying the prefix to both sides, or neither, silently costs
-# recall (see base.py).
-_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+# Query prefixes are MODEL-SPECIFIC, and getting this wrong is invisible.
+#
+# BGE is trained asymmetrically and expects an instruction prefix on queries only.
+# E5 expects "query: " / "passage: " on both sides. The multilingual MiniLM
+# paraphrase models are *symmetric* and expect NO prefix at all — feeding them a
+# BGE instruction string prepends noise to every query and measurably costs
+# recall, while everything still appears to work.
+#
+# Keyed by model so changing EMBEDDING_MODEL cannot silently apply the wrong one.
+_QUERY_PREFIXES: dict[str, str] = {
+    "BAAI/bge-small-en-v1.5": "Represent this sentence for searching relevant passages: ",
+    "BAAI/bge-base-en-v1.5": "Represent this sentence for searching relevant passages: ",
+    "intfloat/multilingual-e5-large": "query: ",
+}
+_DOCUMENT_PREFIXES: dict[str, str] = {
+    "intfloat/multilingual-e5-large": "passage: ",
+}
 
 
 class LocalOnnxEmbeddings:
@@ -61,9 +74,12 @@ class LocalOnnxEmbeddings:
         if not texts:
             return []
 
-        prepared = [
-            (_QUERY_PREFIX + t) if kind == "query" else t for t in texts
-        ]
+        prefix = (
+            _QUERY_PREFIXES.get(self.model_name, "")
+            if kind == "query"
+            else _DOCUMENT_PREFIXES.get(self.model_name, "")
+        )
+        prepared = [prefix + t for t in texts] if prefix else list(texts)
 
         # Cache first. Re-ingesting a revised document re-embeds only what
         # changed, and a repeated question skips inference entirely (§14).
@@ -78,8 +94,10 @@ class LocalOnnxEmbeddings:
             self._cache_set([prepared[i] for i in missing], fresh)
 
         result: list[list[float]] = []
-        for index, vector in enumerate(cached):
-            assert vector is not None
+        for maybe_vector in cached:
+            if maybe_vector is None:  # pragma: no cover — every slot is filled above
+                raise RuntimeError("embedding cache returned a gap after backfill")
+            vector = maybe_vector
             if len(vector) != self.dimensions:
                 # Fail loudly: a width mismatch means EMBEDDING_DIMENSIONS does
                 # not match the model, and silently writing the wrong width

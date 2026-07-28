@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
+from typing import Literal
 
 from app.core.config import get_settings
 from app.core.errors import ProviderError, ProviderTimeoutError
@@ -71,7 +72,7 @@ class OpenAIProvider:
                 # responses, and cost accounting silently reports zero.
                 stream_options={"include_usage": True},
             )
-            finish = "stop"
+            finish: Literal["stop", "length", "error"] = "stop"
             async for event in stream:
                 if event.choices:
                     choice = event.choices[0]
