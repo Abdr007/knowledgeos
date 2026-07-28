@@ -16,33 +16,14 @@ from __future__ import annotations
 import contextlib
 import logging
 import uuid
-from dataclasses import dataclass
 
 from qdrant_client import QdrantClient, models
 
 from app.core.config import get_settings
+from app.providers.vector.base import VectorHit, VectorRecord
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-
-@dataclass(frozen=True, slots=True)
-class VectorHit:
-    chunk_id: uuid.UUID
-    document_id: uuid.UUID
-    score: float
-
-
-@dataclass(frozen=True, slots=True)
-class VectorRecord:
-    vector_id: uuid.UUID
-    chunk_id: uuid.UUID
-    document_id: uuid.UUID
-    workspace_id: uuid.UUID
-    vector: list[float]
-    ordinal: int
-    page_from: int | None
-    page_to: int | None
 
 
 class QdrantVectorStore:

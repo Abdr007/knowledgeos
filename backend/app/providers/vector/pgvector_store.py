@@ -27,7 +27,7 @@ import uuid
 from sqlalchemy import text
 
 from app.db.session import SessionLocal
-from app.providers.vector.qdrant_store import VectorHit, VectorRecord
+from app.providers.vector.base import VectorHit, VectorRecord
 
 logger = logging.getLogger(__name__)
 

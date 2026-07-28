@@ -14,7 +14,6 @@ import logging
 from functools import lru_cache
 
 import redis
-from qdrant_client import QdrantClient
 
 from app.core.config import get_settings
 
@@ -59,7 +58,11 @@ def get_blocking_redis() -> redis.Redis:
 
 
 @lru_cache
-def get_qdrant() -> QdrantClient:
+def get_qdrant():
+    """Imported lazily: the SDK costs ~33 MB resident, and a deployment
+    configured for pgvector never calls this."""
+    from qdrant_client import QdrantClient
+
     settings = get_settings()
     return QdrantClient(
         url=settings.qdrant_url,
