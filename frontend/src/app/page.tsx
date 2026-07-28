@@ -15,21 +15,33 @@ export default function Gate() {
   const [org, setOrg] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [checking, setChecking] = useState(true);
   const emailRef = useRef<HTMLInputElement>(null);
 
-  // An existing refresh cookie means the session can be resumed silently.
+  // Resume in the BACKGROUND. The form renders immediately and is usable the
+  // whole time; a restored session simply redirects out from under it.
+  //
+  // It used to await this before rendering anything, which meant a slow or
+  // hanging request left the page showing nothing but "Restoring session" with
+  // no timeout and no way forward. Never gate the only interactive surface on
+  // a network call.
   useEffect(() => {
-    (async () => {
-      const session = await api.resume();
-      if (session) router.replace("/console");
-      else setChecking(false);
-    })();
+    let cancelled = false;
+    api
+      .resume()
+      .then((session) => {
+        if (session && !cancelled) router.replace("/console");
+      })
+      .catch(() => {
+        /* no session to restore; the form is already on screen */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   useEffect(() => {
-    if (!checking) emailRef.current?.focus();
-  }, [checking]);
+    emailRef.current?.focus();
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,14 +57,6 @@ export default function Gate() {
       );
       setBusy(false);
     }
-  }
-
-  if (checking) {
-    return (
-      <main className="relative z-10 h-screen grid place-items-center">
-        <span className="eyebrow pulse">Restoring session</span>
-      </main>
-    );
   }
 
   return (

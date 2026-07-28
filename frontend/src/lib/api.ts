@@ -25,6 +25,10 @@ import type {
   Workspace,
 } from "./types";
 
+/** Upper bound on session restore. Generous enough for a free instance waking
+ *  from cold, short enough that a user is never left staring at a blank page. */
+const REFRESH_TIMEOUT_MS = 20_000;
+
 let accessToken: string | null = null;
 let refreshInFlight: Promise<boolean> | null = null;
 
@@ -50,7 +54,14 @@ async function refresh(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
       try {
-        const res = await fetch("/api/v1/auth/refresh", { method: "POST" });
+        // Bounded. A hanging request must never be able to wedge the caller —
+        // the landing page awaits this before it can decide what to render, and
+        // a promise that never settles leaves a blank screen with no recourse.
+        // A cold backend takes seconds; anything past this is not coming back.
+        const res = await fetch("/api/v1/auth/refresh", {
+          method: "POST",
+          signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
+        });
         if (!res.ok) return false;
         const body = await res.json();
         accessToken = body.access_token;
