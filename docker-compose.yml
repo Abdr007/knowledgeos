@@ -78,6 +78,35 @@ services:
       retries: 10
       start_period: 10s
 
+  # Applied as a one-shot job BEFORE the application starts, never at app
+  # startup: N replicas booting at once would race Alembic (§19).
+  migrate:
+    build: {context: ./backend, dockerfile: Dockerfile}
+    restart: "no"
+    depends_on:
+      postgres: {condition: service_healthy}
+    environment:
+      <<: &backend_env
+        ENVIRONMENT: ${ENVIRONMENT:-local}
+        SECRET_KEY: ${SECRET_KEY}
+        DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-knowledgeos}:${POSTGRES_PASSWORD:-knowledgeos}@postgres:5432/${POSTGRES_DB:-knowledgeos}
+        REDIS_URL: redis://redis:6379/0
+        QDRANT_URL: http://qdrant:6333
+        QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+        LLM_PROVIDER: ${LLM_PROVIDER:-scripted}
+        ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+        OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+        CHAT_MODEL: ${CHAT_MODEL:-claude-opus-5}
+        UTILITY_MODEL: ${UTILITY_MODEL:-claude-haiku-4-5}
+        EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+        EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-en-v1.5}
+        EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-384}
+        RELEVANCE_FLOOR: ${RELEVANCE_FLOOR:-0.58}
+        STORAGE_LOCAL_PATH: /data/storage
+        CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+        LOG_JSON: ${LOG_JSON:-true}
+    command: ["alembic", "upgrade", "head"]
+
   backend:
     build:
       context: ./backend
@@ -87,18 +116,13 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       qdrant: {condition: service_healthy}
-    environment:
-      ENVIRONMENT: ${ENVIRONMENT:-local}
-      SECRET_KEY: ${SECRET_KEY}
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-knowledgeos}:${POSTGRES_PASSWORD:-knowledgeos}@postgres:5432/${POSTGRES_DB:-knowledgeos}
-      REDIS_URL: redis://redis:6379/0
-      QDRANT_URL: http://qdrant:6333
-      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      CHAT_MODEL: ${CHAT_MODEL:-gpt-4.1}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      LOG_JSON: ${LOG_JSON:-true}
+      migrate: {condition: service_completed_successfully}
+    environment: *backend_env
+    volumes:
+      - storage_data:/data/storage
+      # ONNX weights are ~90 MB and identical across restarts; caching them
+      # turns every cold start after the first into a fast one.
+      - model_cache:/home/app/.cache
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     healthcheck:
@@ -108,7 +132,42 @@ services:
       retries: 5
       start_period: 20s
 
+  # Same image as the backend, different command — two images that must stay in
+  # lockstep will not (§20). Scale independently: `docker compose up -d
+  # --scale worker=4` for a bulk import, without touching chat capacity.
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      qdrant: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    environment: *backend_env
+    volumes:
+      - storage_data:/data/storage
+      - model_cache:/home/app/.cache
+    command: ["python", "-m", "app.worker"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend: {condition: service_healthy}
+    environment:
+      # The browser only ever talks to this origin; Next proxies /api onward,
+      # which is what makes the httpOnly refresh cookie same-site (§19).
+      BACKEND_ORIGIN: http://backend:8000
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+
 volumes:
   postgres_data:
   redis_data:
   qdrant_data:
+  storage_data:
+  model_cache:

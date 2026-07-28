@@ -42,9 +42,20 @@ COPY --from=builder --chown=app:app /app/app /app/app
 COPY --from=builder --chown=app:app /app/alembic /app/alembic
 COPY --from=builder --chown=app:app /app/alembic.ini /app/alembic.ini
 
+# Mount points for the named volumes, created HERE and owned by the app user.
+#
+# Docker seeds a fresh named volume from whatever is at the mount path in the
+# image, ownership included. If the path does not exist in the image, the volume
+# is created owned by root — and a container that correctly runs as non-root then
+# cannot write to its own storage. Uploads fail with PermissionError, and only in
+# the containerised deployment, never in local development.
+RUN mkdir -p /data/storage /home/app/.cache \
+    && chown -R app:app /data /home/app
+
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    HOME=/home/app
 
 USER app
 EXPOSE 8000
