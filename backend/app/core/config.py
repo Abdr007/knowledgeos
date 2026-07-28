@@ -218,7 +218,11 @@ class Settings(BaseSettings):
         connection string by hand.
         """
         url = str(self.database_url)
-        for prefix in ("postgresql+psycopg://", "postgresql+psycopg2://", "postgresql+asyncpg://"):
+        for prefix in (
+            "postgresql+psycopg://",
+            "postgresql+psycopg2://",
+            "postgresql+asyncpg://",
+        ):
             if url.startswith(prefix):
                 return url
         if url.startswith("postgres://"):

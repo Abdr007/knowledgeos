@@ -12,8 +12,18 @@
 /.venv/
 /venv/
 /tests/
-/storage/
-/.model_cache/
+
+# NOTE: backend/storage/ (local uploaded files) is NOT excluded here.
+#
+# It was, as `storage/`, and that pattern also matched app/providers/storage/ —
+# deleting a source package from the image while building perfectly on the
+# developer's machine. Anchoring it as `/storage/` did not help either, because
+# the deploy platform's uploader applies its own matcher before Docker ever sees
+# the context.
+#
+# A pattern that can silently delete source is not worth the few kB it saves.
+# The directory is gitignored, empty in any fresh clone, and the deployed
+# configuration uses STORAGE_BACKEND=postgres, so nothing is written there.
 
 /.env
 /.env.*
