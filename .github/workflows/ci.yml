@@ -26,7 +26,10 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        # Same image as docker-compose. Plain postgres has no pgvector, and the
+        # schema now requires it — CI running a different image than developers
+        # is how a migration passes locally and fails on push.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: knowledgeos
           POSTGRES_PASSWORD: knowledgeos
