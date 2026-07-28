@@ -67,9 +67,25 @@ is wrong.
 ## Run it
 
 **Hosted:** [knowledgeos-ai.vercel.app](https://knowledgeos-ai.vercel.app) — the
-console on Vercel, the API on Render. The backend runs on a free instance that
-sleeps when idle, so the first request after a quiet period takes a few seconds
-to wake; a scheduled workflow keeps that rare.
+console on Vercel, the API on Render, with a corpus already indexed.
+
+```
+demo@knowledgeos.ai / knowledgeos-demo-2026
+```
+
+Three questions worth asking, in this order:
+
+1. *"Why was Reciprocal Rank Fusion chosen instead of a weighted score blend?"* —
+   sources appear before the first token, then the answer streams with clickable
+   citations.
+2. *"How is tenant isolation enforced?"* — watch the Grounding Meter needle sit
+   above the floor.
+3. *"What is the share price of Emirates NBD?"* — **the needle drops below the
+   line and no request is sent to the model at all.**
+
+The backend runs on a free 512 MB instance that sleeps when idle, so the first
+request after a quiet period takes a few seconds to wake; a scheduled workflow
+keeps that rare.
 
 **Locally**, which is the full topology — five services, Qdrant, and a separate
 worker process. Requires Docker, one command from a clean clone:
