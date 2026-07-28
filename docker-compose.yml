@@ -1,0 +1,111 @@
+# Local development stack.
+#
+# Every service declares a healthcheck and the backend waits on
+# `service_healthy`, not `service_started` — a container that has been created
+# is not a database that accepts connections, and depending on the former is the
+# single most common cause of "it works on the second `up`".
+#
+# Ports are bound to 127.0.0.1 so a laptop on a café network is not serving an
+# unauthenticated Postgres to the room.
+
+name: knowledgeos
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-knowledgeos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-knowledgeos}
+      POSTGRES_DB: ${POSTGRES_DB:-knowledgeos}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # -U matters: without it pg_isready checks the OS user, not the app user,
+      # and reports healthy while the application's role does not yet exist.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-knowledgeos} -d ${POSTGRES_DB:-knowledgeos}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Refresh-token revocation lives here, so persistence is on: losing the
+    # denylist on restart would silently un-revoke every revoked token.
+    command: redis-server --appendonly yes --save 60 1
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${QDRANT_PORT:-6333}:6333"
+      - "127.0.0.1:${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    # No QDRANT__SERVICE__API_KEY here, deliberately.
+    #
+    # Qdrant treats the key set to an EMPTY STRING as "auth enabled with an empty
+    # key" and then 401s every request — which reads as a broken deployment
+    # rather than a misconfiguration. Compose has no way to conditionally omit a
+    # mapping-form variable (`${X:-}` still passes X=""), so the variable is
+    # simply absent here and Qdrant runs unauthenticated.
+    #
+    # That is correct for local development: the port is bound to 127.0.0.1 only.
+    # Production enables auth in docker-compose.prod.yml, where the key is real
+    # and comes from the secret manager (§28.1).
+    healthcheck:
+      # The Qdrant image ships no curl or wget, so probe from inside with bash's
+      # /dev/tcp rather than adding a package purely to answer "are you up".
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      qdrant: {condition: service_healthy}
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-knowledgeos}:${POSTGRES_PASSWORD:-knowledgeos}@postgres:5432/${POSTGRES_DB:-knowledgeos}
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CHAT_MODEL: ${CHAT_MODEL:-gpt-4.1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      LOG_JSON: ${LOG_JSON:-true}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:

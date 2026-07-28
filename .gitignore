@@ -1,0 +1,44 @@
+# ── secrets ──────────────────────────────────────────────────────────
+# The repository is public (§28.8). Nothing resembling a credential goes in.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ── python ───────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# ── node / next ──────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+
+# ── local runtime state ──────────────────────────────────────────────
+# Uploaded originals when STORAGE_BACKEND=local, and the ONNX model cache.
+storage/
+.model_cache/
+*.db
+*.sqlite3
+
+# ── os / editor ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

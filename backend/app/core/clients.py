@@ -1,0 +1,63 @@
+"""Long-lived clients for Redis and Qdrant.
+
+Created once per process and reused. Building a connection per request wastes a
+handshake on every call and, under load, exhausts file descriptors before it
+exhausts anything interesting.
+
+Both are exposed through health checks so ``/readyz`` can report what is actually
+reachable rather than assuming.
+"""
+
+from __future__ import annotations
+
+import logging
+from functools import lru_cache
+
+import redis
+from qdrant_client import QdrantClient
+
+from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
+
+
+@lru_cache
+def get_redis() -> redis.Redis:
+    settings = get_settings()
+    return redis.Redis.from_url(
+        str(settings.redis_url),
+        decode_responses=True,
+        socket_connect_timeout=3,
+        socket_timeout=5,
+        # Without this a dropped connection surfaces as an application error on
+        # the next call rather than being transparently re-established.
+        retry_on_timeout=True,
+        health_check_interval=30,
+    )
+
+
+@lru_cache
+def get_qdrant() -> QdrantClient:
+    settings = get_settings()
+    return QdrantClient(
+        url=settings.qdrant_url,
+        api_key=settings.qdrant_api_key,
+        timeout=30,
+    )
+
+
+def check_redis() -> bool:
+    try:
+        return bool(get_redis().ping())
+    except Exception:
+        logger.exception("redis health check failed")
+        return False
+
+
+def check_qdrant() -> bool:
+    try:
+        get_qdrant().get_collections()
+        return True
+    except Exception:
+        logger.exception("qdrant health check failed")
+        return False
