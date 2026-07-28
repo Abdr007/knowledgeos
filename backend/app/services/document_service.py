@@ -77,11 +77,29 @@ def intake_bytes(
         )
     )
     if existing is not None:
+        # Re-uploading identical bytes is idempotent ONLY when the existing copy
+        # is actually usable. A document left FAILED, or stranded PROCESSING by a
+        # worker that died, would otherwise be returned as a successful
+        # "duplicate" forever — and because the checksum matches, re-uploading
+        # could never repair it. The user's only recourse would be to delete a
+        # document they cannot see the state of.
+        if existing.status in {DocumentStatus.READY, DocumentStatus.PENDING}:
+            logger.info(
+                "duplicate upload ignored",
+                extra={"event": "ingest.duplicate", "document_id": str(existing.id)},
+            )
+            return IntakeResult(document=existing, duplicate=True)
+
         logger.info(
-            "duplicate upload ignored",
-            extra={"event": "ingest.duplicate", "document_id": str(existing.id)},
+            "re-queueing an existing document that never completed",
+            extra={
+                "event": "ingest.requeue_incomplete",
+                "document_id": str(existing.id),
+                "previous_status": existing.status.value,
+            },
         )
-        return IntakeResult(document=existing, duplicate=True)
+        requeue(db, document=existing)
+        return IntakeResult(document=existing, duplicate=False)
 
     document = Document(
         workspace_id=workspace_id,
