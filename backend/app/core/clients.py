@@ -37,6 +37,28 @@ def get_redis() -> redis.Redis:
 
 
 @lru_cache
+def get_blocking_redis() -> redis.Redis:
+    """Separate client for blocking commands (BRPOPLPUSH).
+
+    The shared client sets socket_timeout=5 so a wedged server cannot hang a
+    request forever. That same timeout kills a blocking pop, because the socket
+    goes quiet for exactly as long as the command is designed to wait — the
+    worker then dies with a TimeoutError on every idle poll.
+
+    A blocking command therefore needs its own connection whose socket timeout is
+    longer than the block it is asked to perform.
+    """
+    settings = get_settings()
+    return redis.Redis.from_url(
+        str(settings.redis_url),
+        decode_responses=True,
+        socket_connect_timeout=3,
+        socket_timeout=None,  # the command's own timeout is the bound
+        health_check_interval=30,
+    )
+
+
+@lru_cache
 def get_qdrant() -> QdrantClient:
     settings = get_settings()
     return QdrantClient(

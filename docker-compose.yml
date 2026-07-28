@@ -48,7 +48,10 @@ services:
       retries: 10
 
   qdrant:
-    image: qdrant/qdrant:v1.12.4
+    # Pinned to match the qdrant-client major/minor in pyproject. The client
+    # refuses a mismatch of more than one minor version, and an "incompatible
+    # version" warning today is a broken API call after the next client bump.
+    image: qdrant/qdrant:v1.18.0
     restart: unless-stopped
     ports:
       - "127.0.0.1:${QDRANT_PORT:-6333}:6333"

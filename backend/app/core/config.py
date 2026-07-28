@@ -144,6 +144,28 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = True
 
+    @field_validator(
+        "qdrant_api_key",
+        "anthropic_api_key",
+        "openai_api_key",
+        "s3_bucket",
+        "s3_region",
+        "s3_endpoint_url",
+        mode="before",
+    )
+    @classmethod
+    def _empty_to_none(cls, v: object) -> object:
+        """An unset variable in a .env file arrives as "", not as absent.
+
+        Left alone, `QDRANT_API_KEY=` becomes the empty string, which is truthy
+        enough for client libraries to start sending an Authorization header —
+        Qdrant then warns about credentials on an insecure connection, and
+        `llm_is_configured` would report a key that does not exist.
+        """
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, v: object) -> object:
