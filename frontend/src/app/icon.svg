@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18">
+  <!-- Three bars of decreasing length: a rank-ordered result set, which is
+       literally what the product produces. Amber = fused, violet = dense,
+       cyan = sparse, matching the interface's channel colours. -->
+  <rect width="18" height="18" rx="4" fill="#070a10"/>
+  <rect x="2" y="3.5" width="14" height="2.4" rx="1.2" fill="#ffb020"/>
+  <rect x="2" y="7.8" width="9.5" height="2.4" rx="1.2" fill="#a78bfa"/>
+  <rect x="2" y="12.1" width="5" height="2.4" rx="1.2" fill="#22d3ee"/>
+</svg>
