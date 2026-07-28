@@ -17,22 +17,31 @@ venv/
 .ruff_cache/
 .coverage
 htmlcov/
-dist/
-build/
+/backend/dist/
+/backend/build/
 *.egg-info/
 
 # ── node / next ──────────────────────────────────────────────────────
 node_modules/
-.next/
-out/
-.turbo/
+/frontend/.next/
+/frontend/out/
+/frontend/.turbo/
 *.tsbuildinfo
 npm-debug.log*
 
 # ── local runtime state ──────────────────────────────────────────────
 # Uploaded originals when STORAGE_BACKEND=local, and the ONNX model cache.
-storage/
-.model_cache/
+#
+# ANCHORED, and this matters more than it looks. These were written unanchored
+# as `storage/`, and git matches an unanchored directory pattern at ANY depth —
+# so it silently excluded backend/app/providers/storage/ from the repository
+# from the very first commit. An entire source package was missing from the
+# public repo while every local build kept working, because the files were on
+# disk. Anchor anything whose name could plausibly collide with a source
+# directory.
+/backend/storage/
+/backend/.model_cache/
+/storage/
 *.db
 *.sqlite3
 
