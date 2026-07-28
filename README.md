@@ -9,6 +9,8 @@ a measured confidence threshold below which the system refuses instead of invent
 
 `Next.js 16` · `FastAPI` · `PostgreSQL 16` · `Qdrant` · `Redis` · `Docker`
 
+**[Live demo →](https://knowledgeos-ai.vercel.app)** · **[Design document (50pp)](docs/KnowledgeOS_AI_TDD.pdf)** · **[Retrieval evaluation](docs/EVAL.md)**
+
 </div>
 
 ---
@@ -64,7 +66,13 @@ is wrong.
 
 ## Run it
 
-Requires Docker. One command from a clean clone:
+**Hosted:** [knowledgeos-ai.vercel.app](https://knowledgeos-ai.vercel.app) — the
+console on Vercel, the API on Render. The backend runs on a free instance that
+sleeps when idle, so the first request after a quiet period takes a few seconds
+to wake; a scheduled workflow keeps that rare.
+
+**Locally**, which is the full topology — five services, Qdrant, and a separate
+worker process. Requires Docker, one command from a clean clone:
 
 ```bash
 make up      # builds, migrates, starts everything
@@ -175,6 +183,7 @@ make check     # ruff + mypy + tests
 | `ruff` | clean, warnings-as-errors, exemptions justified individually |
 | `mypy` | clean across 73 source files |
 | `pytest` | 58 tests against **real** Postgres, Redis and Qdrant |
+| `make eval` | retrieval metrics against a golden set — [results](docs/EVAL.md) |
 
 The suite runs against real infrastructure rather than mocks, because mocking the
 database means never exercising the generated `tsvector`, the cascade rules or the
@@ -214,8 +223,14 @@ first's workspace, documents, chunks and analytics must get `404` every time.
 - **Not implemented**: OCR for scanned PDFs (they fail loudly with a clear reason
   rather than ingesting as empty), cross-encoder reranking, SSO, S3 storage backend.
   Each has a defined seam; see [`docs/TDD.md`](docs/TDD.md) §29.
-- **Evaluation harness** (§25) is specified in full and not yet built. It is the
-  highest-value next addition, and it is deliberately not claimed as done.
+- **Evaluation harness** is built and its results are published in
+  [`docs/EVAL.md`](docs/EVAL.md) — including two findings that argue against this
+  README: hybrid retrieval does *not* beat lexical-only on the current golden set
+  (0.733 vs 0.759 Recall@10, because the evidence phrases are distinctive
+  technical strings), and refusal accuracy is 0.70 rather than 1.00, because
+  software-engineering questions about a *different subject* sit close enough in
+  embedding space to clear the floor. Both are reported rather than buried, and
+  the second is the measured case for the reranker §29 anticipates.
 
 ---
 
