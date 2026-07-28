@@ -33,6 +33,18 @@ COPY alembic.ini ./
 # This is a service, not a library. It is imported from the working directory,
 # with PYTHONPATH set explicitly in the runtime stage so resolution cannot drift.
 
+# Import the application at BUILD time.
+#
+# A missing module is otherwise discovered when the container starts, by which
+# point the build has reported success and the platform is retrying a
+# healthcheck against a process that cannot boot. This turns that into a build
+# failure that names the module — which is how a source package silently
+# excluded by an ignore rule should have surfaced in the first place.
+ENV PYTHONPATH=/app
+RUN SECRET_KEY=build-time-import-check-not-a-real-secret-0000 \
+    DATABASE_URL=postgresql+psycopg://build:check@localhost:5432/build \
+    .venv/bin/python -c "import app.main; print('import check: OK')"
+
 
 FROM python:3.12-slim AS runtime
 

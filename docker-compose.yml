@@ -12,7 +12,10 @@ name: knowledgeos
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector build rather than plain postgres: the PgVectorStore backend
+    # (§29.1) needs the extension, and a code path that cannot be exercised
+    # locally is a code path that gets shipped untested.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-knowledgeos}
@@ -81,6 +84,12 @@ services:
   # Applied as a one-shot job BEFORE the application starts, never at app
   # startup: N replicas booting at once would race Alembic (§19).
   migrate:
+    # `image:` shared with backend and worker, deliberately. Without it Compose
+    # builds a separate image per service, and they drift — a migration added to
+    # one is missing from another, which surfaces as "Can't locate revision"
+    # against a database that is already ahead. The TDD's "same image, different
+    # command" is only true if the image is actually named and shared.
+    image: knowledgeos-backend:latest
     build: {context: ./backend, dockerfile: Dockerfile}
     restart: "no"
     depends_on:
@@ -108,6 +117,7 @@ services:
     command: ["alembic", "upgrade", "head"]
 
   backend:
+    image: knowledgeos-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -136,6 +146,7 @@ services:
   # lockstep will not (§20). Scale independently: `docker compose up -d
   # --scale worker=4` for a bulk import, without touching chat capacity.
   worker:
+    image: knowledgeos-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -152,6 +163,7 @@ services:
     command: ["python", "-m", "app.worker"]
 
   frontend:
+    image: knowledgeos-frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile

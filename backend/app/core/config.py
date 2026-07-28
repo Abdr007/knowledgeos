@@ -86,6 +86,11 @@ class Settings(BaseSettings):
 
     redis_url: RedisDsn = Field(default=RedisDsn("redis://localhost:6379/0"))
 
+    #: Which VectorStore implementation to use (§29.1). Qdrant is better at
+    #: scale; pgvector is one fewer service and keeps a chunk and its vector in
+    #: the same row, so they cannot drift.
+    vector_backend: Literal["qdrant", "pgvector"] = "qdrant"
+
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str | None = None
     qdrant_collection: str = "knowledgeos_chunks"
@@ -158,6 +163,12 @@ class Settings(BaseSettings):
     rate_limit_chat_per_minute: int = 20
     rate_limit_upload_per_minute: int = 10
     rate_limit_auth_per_minute: int = 10
+
+    #: Run the ingestion worker inside the API process. A deployment topology
+    #: for platforms whose free tier has no background workers — see
+    #: app.worker.start_inline. Prefer a separate worker process anywhere that
+    #: can run one (D6).
+    run_worker_inline: bool = False
 
     # ── observability ────────────────────────────────────────────────────
     log_level: str = "INFO"

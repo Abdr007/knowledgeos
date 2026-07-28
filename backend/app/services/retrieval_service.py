@@ -26,7 +26,7 @@ from app.core.config import get_settings
 from app.db.models.content import Chunk, Document
 from app.db.models.enums import DocumentStatus
 from app.providers.embeddings.local_onnx import get_embedding_provider
-from app.providers.vector.qdrant_store import get_vector_store
+from app.providers.vector.registry import get_vector_store
 from app.services.fusion import FusedHit, diversify, normalize_scores, reciprocal_rank_fusion
 
 logger = logging.getLogger(__name__)

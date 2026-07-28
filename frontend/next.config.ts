@@ -3,9 +3,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
 
-  // Emits a minimal server bundle with only the modules actually imported,
-  // which is what lets the runtime image ship without node_modules (§20).
-  output: "standalone",
+  // Standalone output is for the DOCKER image only — it emits a minimal server
+  // bundle so the runtime layer ships without node_modules (§20). Vercel builds
+  // its own output format and does not want it, so it is opt-in via the flag
+  // the Dockerfile sets.
+  ...(process.env.BUILD_STANDALONE === "true" ? { output: "standalone" as const } : {}),
 
   // NOTE: the API proxy is NOT a rewrite. Next evaluates this file at build
   // time and serialises the result into the standalone bundle, so a rewrite

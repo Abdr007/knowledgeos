@@ -13,13 +13,14 @@ from __future__ import annotations
 import logging
 import signal
 import sys
+import threading
 import time
 from types import FrameType
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.db.session import SessionLocal
-from app.providers.vector.qdrant_store import get_vector_store
+from app.providers.vector.registry import get_vector_store
 from app.services import queue
 from app.services.ingestion_pipeline import process_document
 
@@ -45,9 +46,39 @@ def _handle_signal(signum: int, _frame: FrameType | None) -> None:
 
 
 def run() -> int:
+    """Entrypoint for the standalone worker process."""
+    # Signal handlers can only be installed from the main thread, which is why
+    # this is separate from consume_forever below.
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
+    return consume_forever()
 
+
+def start_inline(stop: threading.Event) -> threading.Thread:
+    """Run the consume loop in a background thread inside the API process.
+
+    A DEPLOYMENT TOPOLOGY, not an architecture change. The queue, the reliable
+    claim/acknowledge protocol and the retry semantics are identical; the loop
+    simply shares a process with the API instead of owning one.
+
+    It exists because several platforms' free tiers offer web services and no
+    background workers, and a demo that cannot ingest is not a demo. Anywhere
+    that can run a second process should run `python -m app.worker` instead and
+    scale the two independently (D6) — embedding is CPU-bound, so sharing a
+    process means a bulk import competes with chat for the same interpreter.
+    """
+    thread = threading.Thread(
+        target=consume_forever, kwargs={"stop": stop}, name="ingest-worker", daemon=True
+    )
+    thread.start()
+    logger.warning(
+        "ingestion worker running INSIDE the API process - single-node topology",
+        extra={"event": "worker.inline"},
+    )
+    return thread
+
+
+def consume_forever(stop: threading.Event | None = None) -> int:
     logger.info(
         "worker starting",
         extra={
@@ -65,7 +96,7 @@ def run() -> int:
 
     last_reap = 0.0
 
-    while not _shutdown:
+    while not _shutdown and not (stop is not None and stop.is_set()):
         now = time.monotonic()
         if now - last_reap > REAP_INTERVAL_SECONDS:
             try:

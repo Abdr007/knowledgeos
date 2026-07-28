@@ -255,7 +255,7 @@ def workspace_system_status(ctx: WsContext, db: DbSession) -> SystemStatus:
 
 def _system_status(db) -> SystemStatus:
     from app.providers.llm.registry import get_llm_provider
-    from app.providers.vector.qdrant_store import get_vector_store
+    from app.providers.vector.registry import get_vector_store
 
     provider = get_llm_provider()
     try:

@@ -261,7 +261,7 @@ def delete_workspace(ctx: WsContext, db: DbSession) -> Message:
     ctx.require(Role.ADMIN)
     # Vectors are removed first, then the SQL cascade — a deleted workspace must
     # never be retrievable, not even during the delete (§13).
-    from app.providers.vector.qdrant_store import get_vector_store
+    from app.providers.vector.registry import get_vector_store
 
     get_vector_store().delete_by_workspace(ctx.workspace.id)
     db.delete(ctx.workspace)

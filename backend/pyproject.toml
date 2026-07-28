@@ -82,6 +82,11 @@ ignore = [
 # Migrations are generated; reformatting them creates diff noise and the long
 # lines are Alembic's own output.
 "alembic/versions/*" = ["E501"]
+# S608 flags the f-string that assembles the vector search's WHERE clause. The
+# clause fragments are a closed set of literals in the same function and every
+# value is a bound parameter, so there is no injection surface — but the rule
+# cannot see that. Scoped to this one file rather than silenced globally.
+"app/providers/vector/pgvector_store.py" = ["S608"]
 
 [tool.mypy]
 python_version = "3.12"

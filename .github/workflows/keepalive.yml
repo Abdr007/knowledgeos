@@ -1,0 +1,48 @@
+name: keep-alive
+
+# An EXTERNAL waker for the free-tier backend.
+#
+# Render spins a free instance down after ~15 minutes of inactivity, and the
+# first request afterwards pays a cold start — which for this service also means
+# reloading the ONNX embedding model. A recruiter opening the demo should not be
+# the request that pays for it.
+#
+# This runs in GitHub's cloud, independent of any laptop and of Render itself,
+# so it can also revive an instance that is fully down after a crash or a failed
+# deploy — something an in-app self-ping cannot do.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # well inside Render's ~15-minute idle threshold
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wake the backend
+        run: |
+          URL="${{ vars.BACKEND_URL || 'https://knowledgeos-api.onrender.com' }}/healthz"
+          # Scheduled runs can lag under load, so retry within a single run
+          # rather than relying on the next cron tick.
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$URL" || echo 000)
+            echo "attempt $attempt: HTTP $code"
+            if [ "$code" = "200" ]; then
+              echo "Backend is awake."
+              exit 0
+            fi
+            sleep 20
+          done
+          # A cold start can legitimately exceed this window, so a failure here
+          # is reported without failing the workflow — the next tick retries,
+          # and a red cron badge on a portfolio repo is worse than a slow wake.
+          echo "::warning::Backend did not respond 200 within the retry window."

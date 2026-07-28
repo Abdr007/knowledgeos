@@ -1,0 +1,141 @@
+# Render Blueprint — the deployed demo.
+#
+# Provisions the whole backend declaratively from this repository:
+# API, Postgres (with pgvector) and a key-value store. One click from
+# https://render.com/deploy?repo=https://github.com/Abdr007/knowledgeos
+#
+# ── how this differs from docker-compose.yml, and why ──────────────────────
+#
+# The local stack runs five containers, including Qdrant and a separate worker
+# process. Render's free tier offers neither private services nor background
+# workers, so this deployment makes two topology substitutions. Both are
+# configuration, not architectural change — every one of them is a different
+# implementation of an existing protocol or a different placement of the same
+# loop:
+#
+#   VECTOR_BACKEND=pgvector   the VectorStore protocol's second implementation
+#                             (TDD §29.1), so vectors live in Postgres instead
+#                             of Qdrant. Verified to return identical cosine
+#                             scores, so the 0.58 refusal floor is unchanged.
+#
+#   STORAGE_BACKEND=postgres  objects in a table rather than a shared volume,
+#                             because a volume cannot be mounted by two services.
+#
+#   RUN_WORKER_INLINE=true    the ingestion loop runs in a thread inside the API
+#                             process. Same queue, same claim/acknowledge
+#                             protocol, same retries — one fewer process.
+#
+#   MIGRATE_ON_START=true     safe here and only here: the free plan runs a
+#                             single instance, so there are no replicas to race
+#                             (TDD §19). Anything larger runs KOS_ROLE=migrate
+#                             as its own pre-deploy step.
+#
+# Scaling up means reversing these four values, not rewriting anything.
+
+databases:
+  - name: knowledgeos-db
+    databaseName: knowledgeos
+    user: knowledgeos
+    plan: free
+    postgresMajorVersion: "16"
+
+services:
+  - type: keyvalue
+    name: knowledgeos-kv
+    plan: free
+    # Reachable only from services in this Blueprint.
+    ipAllowList: []
+    # The refresh-token denylist lives here and is correctness-critical, so
+    # evicting it would silently un-revoke revoked tokens (TDD §14). `noeviction`
+    # makes a full instance fail loudly instead.
+    maxmemoryPolicy: noeviction
+
+  - type: web
+    name: knowledgeos-api
+    runtime: docker
+    plan: free
+    region: oregon
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeploy: true
+
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      # Generated once by Render and held in its secret store; never in the repo.
+      - key: SECRET_KEY
+        generateValue: true
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: knowledgeos-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: knowledgeos-kv
+          property: connectionString
+
+      # ── topology substitutions (see the header) ──────────────────────────
+      - key: VECTOR_BACKEND
+        value: pgvector
+      - key: STORAGE_BACKEND
+        value: postgres
+      - key: RUN_WORKER_INLINE
+        value: "true"
+      - key: MIGRATE_ON_START
+        value: "true"
+
+      # ── models ───────────────────────────────────────────────────────────
+      # Extractive and offline until a provider key is set. Switching to
+      # generated prose is this one value plus ANTHROPIC_API_KEY.
+      - key: LLM_PROVIDER
+        value: scripted
+      - key: ANTHROPIC_API_KEY
+        sync: false          # set in the dashboard, never committed
+      - key: CHAT_MODEL
+        value: claude-opus-5
+      - key: UTILITY_MODEL
+        value: claude-haiku-4-5
+
+      # Embeddings run locally on CPU, so retrieval needs no vendor credential
+      # and no document text leaves the deployment (D2).
+      - key: EMBEDDING_PROVIDER
+        value: local
+      - key: EMBEDDING_MODEL
+        value: BAAI/bge-small-en-v1.5
+      - key: EMBEDDING_DIMENSIONS
+        value: "384"
+
+      # ── retrieval ────────────────────────────────────────────────────────
+      # Measured, not guessed: on-topic 0.63-0.76, off-corpus 0.49-0.52.
+      - key: RELEVANCE_FLOOR
+        value: "0.58"
+      - key: RETRIEVAL_CANDIDATES
+        value: "40"
+      - key: RETRIEVAL_TOP_K
+        value: "8"
+      - key: CHUNK_SIZE_CHARS
+        value: "1200"
+      - key: CHUNK_OVERLAP_CHARS
+        value: "150"
+
+      # ── surface ──────────────────────────────────────────────────────────
+      # The API is fronted by Vercel, which proxies same-origin, so this is the
+      # public console origin.
+      - key: CORS_ORIGINS
+        value: https://knowledgeos-ai.vercel.app
+      # The source is public, so the OpenAPI schema discloses nothing new —
+      # and decoupled from ENVIRONMENT, so enabling it does not weaken cookie
+      # security or drop HSTS.
+      - key: DOCS_ENABLED
+        value: "true"
+      - key: LOG_JSON
+        value: "true"
+
+      # A free instance has 512 MB. The ONNX runtime is the largest consumer,
+      # so keep its thread pools small rather than letting it size to the host's
+      # visible core count, which is not what this container actually gets.
+      - key: OMP_NUM_THREADS
+        value: "2"

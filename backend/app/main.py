@@ -13,6 +13,7 @@ Two health endpoints, deliberately different:
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -60,7 +61,20 @@ async def lifespan(app: FastAPI):
             "ingestion, search and retrieval are unaffected",
             extra={"llm_provider": settings.llm_provider},
         )
+    worker_stop: threading.Event | None = None
+    if settings.run_worker_inline:
+        from app import worker
+
+        worker_stop = threading.Event()
+        worker.start_inline(worker_stop)
+
     yield
+
+    if worker_stop is not None:
+        # Ask the loop to finish its current job rather than abandoning a
+        # half-embedded document, which would leave it PROCESSING with nothing
+        # left to pick it up.
+        worker_stop.set()
     logger.info("shutting down")
 
 

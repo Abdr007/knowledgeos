@@ -19,6 +19,19 @@ fi
 # and local development unchanged.
 PORT="${PORT:-8000}"
 
+# Apply migrations before starting, when explicitly asked.
+#
+# TDD §19 says migrations run as a SEPARATE pre-deploy job, never at application
+# start, because N replicas booting together race Alembic. That reasoning is
+# unchanged — this is opt-in and safe only at a single replica, which is what a
+# free tier gives you and what MIGRATE_ON_START is documented to assume.
+# Anywhere with more than one instance must run `KOS_ROLE=migrate` as its own
+# step and leave this unset.
+if [ "${MIGRATE_ON_START:-false}" = "true" ]; then
+    echo "MIGRATE_ON_START=true - applying migrations (single-replica deployments only)"
+    alembic upgrade head
+fi
+
 case "${KOS_ROLE:-api}" in
     api)
         # --proxy-headers so client IPs survive the load balancer, which matters

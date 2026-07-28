@@ -7,7 +7,7 @@ retriever, so the metrics are not circular.
 
 | | |
 |---|---|
-| Run | 2026-07-28 19:42 UTC |
+| Run | 2026-07-28 20:08 UTC |
 | Corpus | 1 document(s), 102 chunks |
 | Corpus hash | `fc42ff86231de871` |
 | Embedding model | `BAAI/bge-small-en-v1.5` (384-d) |
@@ -19,9 +19,7 @@ retriever, so the metrics are not circular.
 
 | Configuration | Recall@5 | Recall@10 | Precision@5 | MRR | nDCG@10 | Hit rate | Refusal acc. | False refusals | p50 | p95 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| **Hybrid (RRF)** | 0.601 | 0.733 | 0.232 | 0.628 | 0.584 | 0.895 | 0.700 | 0.000 | 6ms | 18ms |
-| Dense only | 0.588 | 0.715 | 0.210 | 0.654 | 0.624 | 0.842 | 0.700 | 0.000 | 4ms | 5ms |
-| Sparse only | 0.618 | 0.759 | 0.210 | 0.606 | 0.566 | 0.895 | n/a | n/a | 5ms | 7ms |
+| **Hybrid (RRF)** | 0.601 | 0.733 | 0.232 | 0.628 | 0.587 | 0.895 | 0.700 | 0.000 | 7ms | 10ms |
 
 ### What these numbers actually say
 

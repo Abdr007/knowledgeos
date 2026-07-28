@@ -17,11 +17,9 @@ import contextlib
 import logging
 import uuid
 from dataclasses import dataclass
-from functools import lru_cache
 
 from qdrant_client import QdrantClient, models
 
-from app.core.clients import get_qdrant
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -226,12 +224,3 @@ class QdrantVectorStore:
                 ]
             )
         return int(self._client.count(self._collection, count_filter=flt, exact=True).count)
-
-
-@lru_cache
-def get_vector_store() -> QdrantVectorStore:
-    return QdrantVectorStore(
-        client=get_qdrant(),
-        collection=settings.qdrant_collection,
-        dimensions=settings.embedding_dimensions,
-    )

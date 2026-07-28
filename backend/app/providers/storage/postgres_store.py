@@ -74,9 +74,7 @@ class PostgresStorage:
 
     def delete(self, key: str) -> None:
         with SessionLocal() as session:
-            session.execute(
-                text("DELETE FROM stored_objects WHERE key = :key"), {"key": key}
-            )
+            session.execute(text("DELETE FROM stored_objects WHERE key = :key"), {"key": key})
             session.commit()
 
     def exists(self, key: str) -> bool:

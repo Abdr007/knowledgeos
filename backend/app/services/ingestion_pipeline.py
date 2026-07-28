@@ -27,7 +27,8 @@ from app.db.models.identity import Workspace
 from app.providers.embeddings.local_onnx import get_embedding_provider
 from app.providers.parsers.formats import get_parser
 from app.providers.storage.local_disk import get_storage
-from app.providers.vector.qdrant_store import VectorRecord, get_vector_store
+from app.providers.vector.qdrant_store import VectorRecord
+from app.providers.vector.registry import get_vector_store
 from app.services.chunking import chunk_document
 from app.services.usage_recorder import record_usage
 
