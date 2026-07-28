@@ -123,10 +123,13 @@ class Settings(BaseSettings):
     #: Retrieval breadth before fusion and reranking narrow it down.
     retrieval_candidates: int = 40
     retrieval_top_k: int = 8
-    #: Fused-score threshold below which the refusal gate fires (§10). A model
-    #: handed zero context still answers — from parametric memory — which is the
-    #: single largest source of confident fabrication in RAG systems.
-    relevance_floor: float = 0.35
+    #: COSINE-SIMILARITY threshold below which the refusal gate fires (§10).
+    #: Compared against the best raw dense score, never the fused RRF score —
+    #: RRF measures rank agreement, not relevance, and an ANN index always
+    #: returns its k nearest neighbours however far away they are.
+    #: Measured on BAAI/bge-small-en-v1.5: on-topic 0.63-0.76, off-topic
+    #: 0.49-0.52. 0.58 sits in the gap with margin on both sides.
+    relevance_floor: float = 0.58
 
     # ── storage ──────────────────────────────────────────────────────────
     storage_backend: Literal["local", "s3"] = "local"
